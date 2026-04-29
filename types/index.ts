@@ -46,12 +46,13 @@ export type PriceHistory = {
   ingredientId: string;
   ingredientName: string;
   price: number;
-  source?: "manual" | "receipt_ai";
+  source?: "manual" | "receipt_ai" | "receipt_ai_new";
   recordedAt: Timestamp;
 };
 
 export type DetectedItem = {
   name: string;
+  ingredientNameKana?: string; // AIが返却、なければ食材名をそのまま使用
   price: number;
   unit: string;
   confidence: number;

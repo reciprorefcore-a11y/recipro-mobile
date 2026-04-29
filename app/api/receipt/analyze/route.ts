@@ -4,13 +4,15 @@ import type { ReceiptAnalysisResult } from "@/types";
 const SYSTEM_PROMPT = `あなたは飲食店の仕入伝票を解析する専門家です。
 画像から以下を抽出してください:
 1. 食材名(原材料名)
-2. 単価(税抜)
-3. 単位(kg, g, 個, L, ml, 本, 袋など)
+2. 食材名のひらがな読み
+3. 単価(税抜)
+4. 単位(kg, g, 個, L, ml, 本, 袋など)
 出力は厳密に以下のJSON形式で返してください(他の説明文は不要):
 {
   "items": [
     {
       "name": "食材名",
+      "ingredientNameKana": "ひらがな読み",
       "price": 数値,
       "unit": "単位",
       "confidence": 0.0〜1.0
@@ -22,7 +24,8 @@ const SYSTEM_PROMPT = `あなたは飲食店の仕入伝票を解析する専門
 - 手書きで読みにくい箇所はconfidenceを下げる
 - 税込/税抜が不明な場合は税抜と仮定
 - 1ケース価格と単価が両方ある場合は単価を採用
-- 食材以外(消耗品、サービス料、消費税等)は除外`;
+- 食材以外(消耗品、サービス料、消費税等)は除外
+- ingredientNameKanaは日本語食材名のひらがな読み(カタカナや英語はそのまま)`;
 
 type AnalyzeRequestBody = {
   imageBase64?: string;
@@ -155,6 +158,9 @@ function parseAnalysisResult(text: string): ReceiptAnalysisResult {
           .filter((item) => item.name && Number.isFinite(item.price))
           .map((item) => ({
             name: String(item.name),
+            ingredientNameKana: item.ingredientNameKana
+              ? String(item.ingredientNameKana)
+              : undefined,
             price: Number(item.price),
             unit: String(item.unit || "個"),
             confidence: clamp(Number(item.confidence), 0, 1),

@@ -7,6 +7,8 @@ import { useAuth } from "@/hooks/useAuth";
 import {
   getIngredients,
   updateIngredientPricesFromReceipt,
+  addIngredient,
+  addPriceHistory,
 } from "@/lib/firestore";
 import type {
   DetectedItem,
@@ -30,18 +32,25 @@ export default function ReceiptPage() {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
-  const [done, setDone] = useState(false);
+  const [doneMessage, setDoneMessage] = useState("");
 
   const companyId = user?.uid ?? "";
   const selectedCount = useMemo(
     () => matchedItems.filter((item) => item.selected).length,
     [matchedItems]
   );
+  const newSelectedCount = useMemo(
+    () => matchedItems.filter((item) => item.selected && item.matchType === "new").length,
+    [matchedItems]
+  );
+  const matchedSelectedCount = selectedCount - newSelectedCount;
 
   useEffect(() => {
     if (!companyId) return;
-    getIngredients(companyId).then(setIngredients).catch(() => {
+    getIngredients(companyId).catch(() => {
       setError("食材マスタの読み込みに失敗しました");
+    }).then((data) => {
+      if (data) setIngredients(data);
     });
   }, [companyId]);
 
@@ -52,7 +61,7 @@ export default function ReceiptPage() {
 
     setError("");
     setMatchedItems([]);
-    setDone(false);
+    setDoneMessage("");
 
     try {
       const compressed = await compressImage(file);
@@ -84,12 +93,10 @@ export default function ReceiptPage() {
         setError("本日の解析上限に達しました");
         return;
       }
-
       if (response.status === 422) {
         setError("もう一度撮影してください");
         return;
       }
-
       if (!response.ok) {
         setError("解析に失敗しました。再度お試しください");
         return;
@@ -118,15 +125,19 @@ export default function ReceiptPage() {
   const handleUpdate = async () => {
     if (!companyId) return;
 
-    const updates = matchedItems
+    const matchedUpdates = matchedItems
       .filter((item) => item.selected && item.matchedIngredient)
       .map((item) => ({
         ingredient: item.matchedIngredient as Ingredient,
         newPrice: item.price,
       }));
 
-    if (updates.length === 0) {
-      setError("更新する既存食材を選択してください");
+    const newItems = matchedItems.filter(
+      (item) => item.selected && item.matchType === "new"
+    );
+
+    if (matchedUpdates.length === 0 && newItems.length === 0) {
+      setError("更新または追加する食材を選択してください");
       return;
     }
 
@@ -134,8 +145,43 @@ export default function ReceiptPage() {
     setError("");
 
     try {
-      await updateIngredientPricesFromReceipt(companyId, updates);
-      setDone(true);
+      // 既存食材の価格更新 (priceHistory も内部で記録)
+      if (matchedUpdates.length > 0) {
+        await updateIngredientPricesFromReceipt(companyId, matchedUpdates);
+      }
+
+      // 新規食材の一括登録
+      if (newItems.length > 0) {
+        await Promise.all(
+          newItems.map(async (item, idx) => {
+            const uniqueId = `${companyId.slice(0, 8)}_${Date.now()}_${idx}`;
+            const nameNormalized = item.name.replace(/[\s　]/g, "");
+            const ingredientNameKana = item.ingredientNameKana ?? item.name;
+
+            const ingredientId = await addIngredient(companyId, {
+              uniqueId,
+              ingredientName: item.name,
+              ingredientNameKana,
+              nameNormalized,
+              unit: item.unit,
+              currentPrice: item.price,
+            });
+
+            await addPriceHistory(companyId, {
+              ingredientId,
+              ingredientName: item.name,
+              price: item.price,
+              source: "receipt_ai_new",
+            });
+          })
+        );
+      }
+
+      const parts: string[] = [];
+      if (matchedUpdates.length > 0) parts.push(`${matchedUpdates.length}件更新`);
+      if (newItems.length > 0) parts.push(`${newItems.length}件新規追加`);
+      setDoneMessage(parts.join("、") + "しました");
+
       window.setTimeout(() => router.push("/search"), 2500);
     } catch {
       setError("保存に失敗しました。再度お試しください");
@@ -233,13 +279,24 @@ export default function ReceiptPage() {
           </>
         ) : (
           <section className="space-y-3">
-            <div className="bg-white rounded-2xl shadow-sm p-4">
+            {/* ヘッダー */}
+            <div className="bg-white rounded-2xl shadow-sm p-4 space-y-1">
               <h2 className="text-lg font-bold text-gray-900">解析結果</h2>
-              <p className="text-sm text-gray-500 mt-1">
-                更新する食材を確認してください
+              <p className="text-sm text-gray-500">
+                更新・追加する食材を確認してください
               </p>
+              {/* 新規追加がある場合の説明 */}
+              {matchedItems.some((i) => i.matchType === "new") && (
+                <div className="mt-2 bg-green-50 rounded-xl px-3 py-2 flex items-start gap-2">
+                  <span className="text-green-600 text-sm">✦</span>
+                  <p className="text-xs text-green-700">
+                    <span className="font-bold">新規追加</span>の食材は食材マスタに自動登録されます
+                  </p>
+                </div>
+              )}
             </div>
 
+            {/* 結果リスト */}
             {matchedItems.map((item, index) => (
               <ResultItem
                 key={`${item.name}-${index}`}
@@ -248,14 +305,22 @@ export default function ReceiptPage() {
               />
             ))}
 
+            {/* 保存ボタン */}
             <button
               type="button"
               onClick={handleUpdate}
               disabled={saving || selectedCount === 0}
-              className="w-full rounded-xl py-4 font-bold text-white disabled:opacity-60"
+              className="w-full rounded-xl py-4 font-bold text-white disabled:opacity-60 flex items-center justify-center gap-2"
               style={{ backgroundColor: PRIMARY }}
             >
-              {saving ? "更新中..." : `選択した項目を更新する (${selectedCount}件)`}
+              {saving && (
+                <span className="h-5 w-5 rounded-full border-2 border-white border-t-transparent animate-spin" />
+              )}
+              {saving
+                ? "保存中..."
+                : selectedCount === 0
+                ? "項目を選択してください"
+                : buildButtonLabel(matchedSelectedCount, newSelectedCount)}
             </button>
           </section>
         )}
@@ -264,14 +329,21 @@ export default function ReceiptPage() {
           <p className="text-sm text-red-600 bg-red-50 rounded-xl p-3">{error}</p>
         )}
 
-        {done && (
+        {doneMessage && (
           <p className="text-sm text-green-700 bg-green-50 rounded-xl p-3">
-            更新が完了しました。食材一覧に移動します。
+            ✅ {doneMessage}　食材一覧に移動します。
           </p>
         )}
       </div>
     </main>
   );
+}
+
+function buildButtonLabel(matched: number, added: number): string {
+  const parts: string[] = [];
+  if (matched > 0) parts.push(`更新 ${matched}件`);
+  if (added > 0) parts.push(`新規追加 ${added}件`);
+  return `${parts.join(" + ")} を保存する`;
 }
 
 function ResultItem({
@@ -281,42 +353,54 @@ function ResultItem({
   item: MatchedItem;
   onToggle: () => void;
 }) {
-  const hasChange = item.oldPrice !== undefined && item.oldPrice !== item.price;
   const isNew = item.matchType === "new";
+  const hasChange =
+    !isNew && item.oldPrice !== undefined && item.oldPrice !== item.price;
+
   const statusClass = isNew
-    ? "text-red-600 bg-red-50"
+    ? "text-green-700 bg-green-50"
     : hasChange
-      ? "text-green-700 bg-green-50"
-      : "text-gray-600 bg-gray-100";
+    ? "text-blue-700 bg-blue-50"
+    : "text-gray-600 bg-gray-100";
+
   const priceLabel = isNew
-    ? `新規 → ${item.price.toLocaleString()}円(マスタなし)`
-    : `${item.oldPrice?.toLocaleString()}円 → ${item.price.toLocaleString()}円(${
+    ? `新規追加 → ${item.price.toLocaleString()}円`
+    : `${item.oldPrice?.toLocaleString() ?? "—"}円 → ${item.price.toLocaleString()}円（${
         hasChange ? "変更あり" : "変更なし"
-      })`;
+      }）`;
 
   return (
-    <article className="bg-white rounded-2xl shadow-sm p-4 space-y-3">
+    <article
+      className={`bg-white rounded-2xl shadow-sm p-4 space-y-3 transition-opacity ${
+        !item.selected ? "opacity-50" : ""
+      }`}
+    >
       <div className="flex items-start gap-3">
         <input
           type="checkbox"
           checked={item.selected}
           onChange={onToggle}
-          className="mt-1 h-5 w-5 accent-[#E85D2C]"
+          className="mt-1 h-5 w-5 accent-[#E85D2C] cursor-pointer"
         />
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <h3 className="font-bold text-gray-900 truncate">{item.name}</h3>
+          <div className="flex items-center gap-2 flex-wrap">
+            <h3 className="font-bold text-gray-900">{item.name}</h3>
+            {isNew && (
+              <span className="text-xs font-bold text-white bg-green-500 px-2 py-0.5 rounded-full">
+                新規追加
+              </span>
+            )}
             {item.confidence < 0.8 && (
               <span className="text-xs text-amber-600" aria-label="読み取り注意">
-                ⚠
+                ⚠ 要確認
               </span>
             )}
           </div>
           <p className="text-xs text-gray-500 mt-1">
             {item.unit}・信頼度 {Math.round(item.confidence * 100)}%
           </p>
-          {item.matchedIngredient && (
-            <p className="text-xs text-gray-500 mt-1">
+          {!isNew && item.matchedIngredient && (
+            <p className="text-xs text-gray-400 mt-0.5">
               マッチ: {item.matchedIngredient.ingredientName}
             </p>
           )}
@@ -326,12 +410,6 @@ function ResultItem({
       <p className={`rounded-xl px-3 py-2 text-sm font-bold ${statusClass}`}>
         {priceLabel}
       </p>
-
-      {isNew && (
-        <p className="text-xs text-red-600">
-          新規食材として登録候補です。マスタ登録は食材検索画面から行ってください。
-        </p>
-      )}
     </article>
   );
 }
@@ -342,34 +420,35 @@ function matchDetectedItems(
 ): MatchedItem[] {
   return detectedItems.map((item) => {
     const exact = ingredients.find(
-      (ingredient) => ingredient.ingredientName === item.name
+      (ing) => ing.ingredientName === item.name
     );
     if (exact) return toMatchedItem(item, exact, "exact");
 
     const normalizedName = normalizeName(item.name);
-    const normalized = ingredients.find((ingredient) =>
-      [ingredient.ingredientName, ingredient.ingredientNameKana, ingredient.nameNormalized]
+    const normalized = ingredients.find((ing) =>
+      [ing.ingredientName, ing.ingredientNameKana, ing.nameNormalized]
         .map(normalizeName)
         .includes(normalizedName)
     );
     if (normalized) return toMatchedItem(item, normalized, "normalized");
 
-    const partial = ingredients.find((ingredient) => {
+    const partial = ingredients.find((ing) => {
       const candidates = [
-        ingredient.ingredientName,
-        ingredient.ingredientNameKana,
-        ingredient.nameNormalized,
+        ing.ingredientName,
+        ing.ingredientNameKana,
+        ing.nameNormalized,
       ].map(normalizeName);
       return candidates.some(
-        (candidate) =>
-          candidate.length >= 2 &&
+        (c) =>
+          c.length >= 2 &&
           normalizedName.length >= 2 &&
-          (candidate.includes(normalizedName) || normalizedName.includes(candidate))
+          (c.includes(normalizedName) || normalizedName.includes(c))
       );
     });
     if (partial) return toMatchedItem(item, partial, "partial");
 
-    return { ...item, matchType: "new", selected: false };
+    // 新規食材: デフォルトで選択 ON
+    return { ...item, matchType: "new", selected: true };
   });
 }
 
@@ -399,7 +478,6 @@ function normalizeName(value: string) {
 
 async function compressImage(file: File): Promise<string> {
   const imageUrl = URL.createObjectURL(file);
-
   try {
     const image = await loadImage(imageUrl);
     const canvas = document.createElement("canvas");
@@ -414,12 +492,10 @@ async function compressImage(file: File): Promise<string> {
 
     let quality = 0.86;
     let dataUrl = canvas.toDataURL("image/jpeg", quality);
-
     while (estimateBase64Bytes(dataUrl) > 1024 * 1024 && quality > 0.45) {
       quality -= 0.1;
       dataUrl = canvas.toDataURL("image/jpeg", quality);
     }
-
     return dataUrl;
   } finally {
     URL.revokeObjectURL(imageUrl);
