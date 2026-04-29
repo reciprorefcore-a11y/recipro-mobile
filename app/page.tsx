@@ -180,6 +180,14 @@ export default function HomePage() {
           </button>
         </div>
 
+        {/* 食材追加の常設導線 */}
+        <button
+          onClick={() => router.push("/receipt")}
+          className="w-full flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white py-3 text-sm font-bold text-gray-600 hover:bg-gray-50 transition-colors cursor-pointer"
+        >
+          📷 仕入伝票を追加して食材を増やす
+        </button>
+
         <ImprovementCard />
       </div>
     </main>

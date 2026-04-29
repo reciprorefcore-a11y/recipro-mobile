@@ -1,12 +1,14 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
 import type { AiWorkflowResult } from "@/types";
 import AiWorkflowPanel from "@/components/AiWorkflowPanel";
 
 export default function RecipesPage() {
   const { user } = useAuth();
+  const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<AiWorkflowResult | null>(null);
   const [error, setError] = useState("");
@@ -95,6 +97,15 @@ export default function RecipesPage() {
             </button>
           </section>
         )}
+
+        {/* 食材追加の常設導線 */}
+        <button
+          type="button"
+          onClick={() => router.push("/receipt")}
+          className="w-full flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white py-3 text-sm font-bold text-gray-600 hover:bg-gray-50 transition-colors cursor-pointer"
+        >
+          📷 仕入伝票を追加して食材を増やす
+        </button>
 
         {error && (
           <p className="rounded-xl bg-red-50 p-3 text-sm text-red-600">

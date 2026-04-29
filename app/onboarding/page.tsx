@@ -51,6 +51,35 @@ function toDraft(name: string, price: number, confidence: number, i: number): Dr
   return { tmpId: makeTmpId(i), name, price, confidence, isEditing: false, editName: name, editPrice: String(price) };
 }
 
+// 食材名を正規化してマージキーとして使う
+function normalizeForMerge(name: string): string {
+  return name
+    .trim()
+    .toLowerCase()
+    .replace(/[\s　]/g, "")
+    .replace(/[ァ-ン]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0x60));
+}
+
+// 既存リストに新しい食材を累積マージする（同一食材は最新価格・仕入先で上書き）
+function mergeIngredients(existing: DraftIngredient[], incoming: DraftIngredient[]): DraftIngredient[] {
+  const result = [...existing];
+  for (const item of incoming) {
+    const key = normalizeForMerge(item.name);
+    const idx = result.findIndex((x) => normalizeForMerge(x.name) === key);
+    if (idx >= 0) {
+      result[idx] = {
+        ...result[idx],
+        price: item.price,
+        supplier: item.supplier ?? result[idx].supplier,
+        confidence: Math.max(result[idx].confidence, item.confidence),
+      };
+    } else {
+      result.push(item);
+    }
+  }
+  return result;
+}
+
 // ─── Page ────────────────────────────────────────────────
 
 export default function OnboardingPage() {
@@ -60,11 +89,13 @@ export default function OnboardingPage() {
   const [step, setStep] = useState<Step>(1);
   const initChecked = useRef(false);
 
-  // Step 1
+  // Step 1 — 複数枚対応
   const cam1 = useRef<HTMLInputElement>(null);
   const file1 = useRef<HTMLInputElement>(null);
   const [s1Loading, setS1Loading] = useState(false);
-  const [s1Items, setS1Items] = useState<DraftIngredient[]>([]);
+  const [s1Items, setS1Items] = useState<DraftIngredient[]>([]); // 累積リスト
+  const [s1Saved, setS1Saved] = useState(false);
+  const [s1SavedCount, setS1SavedCount] = useState(0);
   const [s1Saving, setS1Saving] = useState(false);
   const [s1Error, setS1Error] = useState("");
 
@@ -101,7 +132,7 @@ export default function OnboardingPage() {
         initOnboarding(user.uid).catch(console.error);
       }
     });
-  }, [user, router, initChecked]);
+  }, [user, router]);
 
   const handleSkip = async () => {
     if (!user) return;
@@ -109,8 +140,9 @@ export default function OnboardingPage() {
     router.replace("/");
   };
 
-  // ── Step 1: 食材マスター ─────────────────────────────────
+  // ── Step 1: 食材マスター（複数枚対応）───────────────────
 
+  // 撮影ごとに新規食材をマージ追加する
   const handleS1File = async (e: ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
     e.target.value = "";
@@ -129,7 +161,7 @@ export default function OnboardingPage() {
       if (!res.ok) { setS1Error("解析に失敗しました。再度お試しください"); return; }
       const result = (await res.json()) as AiWorkflowResult;
       if (result.items.length === 0) { setS1Error("食材を読み取れませんでした。もう一度撮影してください"); return; }
-      setS1Items(result.items.map((item) => ({
+      const newItems: DraftIngredient[] = result.items.map((item) => ({
         name: item.name,
         kana: item.ingredientNameKana,
         price: item.price,
@@ -138,7 +170,8 @@ export default function OnboardingPage() {
         supplier: item.supplier,
         confidence: item.confidence,
         selected: true,
-      })));
+      }));
+      setS1Items((prev) => mergeIngredients(prev, newItems));
     } catch {
       setS1Error("通信エラーが発生しました");
     } finally {
@@ -150,10 +183,15 @@ export default function OnboardingPage() {
     setS1Items((prev) => prev.map((item, idx) => idx === i ? { ...item, selected: !item.selected } : item));
   };
 
+  // 選択済み食材を保存して完了メッセージへ
   const handleS1Save = async () => {
     if (!user) return;
     const selected = s1Items.filter((i) => i.selected);
-    if (selected.length === 0) { setStep(2); return; }
+    if (selected.length === 0) {
+      // 何も選択されていない場合はスキップ扱いでStep2へ
+      setStep(2);
+      return;
+    }
     setS1Saving(true);
     setS1Error("");
     try {
@@ -162,7 +200,7 @@ export default function OnboardingPage() {
           uniqueId: `${companyId.slice(0, 8)}_ob_${Date.now()}_${idx}`,
           ingredientName: item.name,
           ingredientNameKana: item.kana ?? item.name,
-          nameNormalized: item.name.toLowerCase().replace(/[\s　]/g, ""),
+          nameNormalized: normalizeForMerge(item.name),
           unit: item.unit,
           currentPrice: item.price,
           ...(item.quantity !== undefined && { quantity: item.quantity }),
@@ -170,7 +208,8 @@ export default function OnboardingPage() {
         })
       ));
       await completeOnboardingStep(companyId, "ingredientMaster");
-      setStep(2);
+      setS1SavedCount(selected.length);
+      setS1Saved(true);
     } catch {
       setS1Error("保存に失敗しました。再度お試しください");
     } finally {
@@ -348,61 +387,117 @@ export default function OnboardingPage() {
         {/* ステップインジケーター */}
         <StepIndicator current={step} />
 
-        {/* Step 1 */}
+        {/* ─── Step 1 ─────────────────────────────────── */}
         {step === 1 && (
           <section className="space-y-4">
+            {/* 常時マウントの隠し input (複数撮影でも同じ ref を使い回す) */}
+            <input ref={cam1} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleS1File} />
+            <input ref={file1} type="file" accept="image/*" className="hidden" onChange={handleS1File} />
+
             <div className="bg-white rounded-2xl shadow-sm p-4">
               <p className="text-xs font-semibold text-primary">Step 1</p>
               <h2 className="mt-1 text-lg font-bold text-gray-900">食材マスターを作成</h2>
               <p className="mt-1 text-sm text-gray-600">
-                まず最初に、仕入伝票を撮影して食材マスターを作成してください。
+                お持ちの仕入伝票を撮影してください。
+              </p>
+              <p className="mt-0.5 text-sm text-gray-500">
+                複数枚ある場合は、追加で撮影できます。
               </p>
             </div>
 
-            {s1Loading ? (
-              <LoadingCard label="伝票を解析しています..." />
-            ) : s1Items.length > 0 ? (
-              <>
-                <div className="bg-white rounded-2xl shadow-sm p-4 space-y-3">
-                  <p className="text-sm font-semibold text-gray-700">
-                    {s1Items.length}件の食材を読み取りました
+            {/* 保存完了メッセージ */}
+            {s1Saved ? (
+              <div className="bg-white rounded-2xl shadow-sm p-6 space-y-4 text-center">
+                <div className="text-4xl">✅</div>
+                <div>
+                  <h3 className="text-lg font-bold text-gray-900">
+                    {s1SavedCount}件の食材マスタができました
+                  </h3>
+                  <p className="mt-2 text-sm text-gray-500">
+                    完璧じゃなくて大丈夫です。後でいつでも食材を追加できます。
                   </p>
-                  <div className="space-y-2">
-                    {s1Items.map((item, i) => (
-                      <label key={i} className="flex items-center gap-3 rounded-xl border border-gray-100 px-3 py-2 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={item.selected}
-                          onChange={() => toggleS1Item(i)}
-                          className="h-4 w-4 accent-[#E85D2C]"
-                        />
-                        <div className="flex-1 min-w-0">
-                          <p className="font-semibold text-sm text-gray-900 truncate">{item.name}</p>
-                          <p className="text-xs text-gray-500">{item.unit} · {item.price.toLocaleString()}円</p>
-                        </div>
-                        <span className="text-xs text-gray-400 shrink-0">
-                          {Math.round(item.confidence * 100)}%
-                        </span>
-                      </label>
-                    ))}
-                  </div>
-                  {s1Error && <p className="text-sm text-red-600 bg-red-50 rounded-xl p-3">{s1Error}</p>}
-                  <button
-                    type="button"
-                    onClick={handleS1Save}
-                    disabled={s1Saving}
-                    className="w-full min-h-12 rounded-xl font-bold text-white disabled:opacity-60 flex items-center justify-center gap-2"
-                    style={{ backgroundColor: PRIMARY }}
-                  >
-                    {s1Saving && <Spinner />}
-                    {s1Saving ? "保存中..." : `${s1Items.filter((x) => x.selected).length}件を保存して次へ`}
-                  </button>
-                  <button type="button" onClick={() => { setS1Items([]); setS1Error(""); }}
-                    className="w-full text-sm text-gray-500 underline">
-                    撮り直す
-                  </button>
                 </div>
-              </>
+                <button
+                  type="button"
+                  onClick={() => setStep(2)}
+                  className="w-full min-h-12 rounded-xl font-bold text-white"
+                  style={{ backgroundColor: PRIMARY }}
+                >
+                  次へ
+                </button>
+              </div>
+
+            /* 解析中 */
+            ) : s1Loading ? (
+              <LoadingCard label="伝票を解析しています..." />
+
+            /* 累積リスト表示（1枚以上撮影済み）*/
+            ) : s1Items.length > 0 ? (
+              <div className="bg-white rounded-2xl shadow-sm p-4 space-y-4">
+
+                {/* 件数 + 追加案内 */}
+                <div className="rounded-xl bg-orange-50 border border-orange-200 px-3 py-2.5">
+                  <p className="text-sm font-bold text-gray-800">
+                    合計 {s1Items.length} 件の食材を読み取りました
+                  </p>
+                  <p className="text-xs text-gray-500 mt-0.5">他にも仕入伝票はありますか？</p>
+                </div>
+
+                {/* 累積食材リスト */}
+                <div className="space-y-2 max-h-72 overflow-y-auto">
+                  {s1Items.map((item, i) => (
+                    <label
+                      key={i}
+                      className="flex items-center gap-3 rounded-xl border border-gray-100 px-3 py-2 cursor-pointer"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={item.selected}
+                        onChange={() => toggleS1Item(i)}
+                        className="h-4 w-4 accent-[#E85D2C] shrink-0"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <p className="font-semibold text-sm text-gray-900 truncate">{item.name}</p>
+                        <p className="text-xs text-gray-500">
+                          {item.unit} · {item.price.toLocaleString()}円
+                          {item.supplier ? ` · ${item.supplier}` : ""}
+                        </p>
+                      </div>
+                      <span className="text-xs text-gray-400 shrink-0">
+                        {Math.round(item.confidence * 100)}%
+                      </span>
+                    </label>
+                  ))}
+                </div>
+
+                {s1Error && <p className="text-sm text-red-600 bg-red-50 rounded-xl p-3">{s1Error}</p>}
+
+                {/* 別の伝票を追加ボタン */}
+                <button
+                  type="button"
+                  onClick={() => cam1.current?.click()}
+                  className="w-full min-h-11 rounded-xl border-2 border-dashed border-orange-300 bg-orange-50 font-bold text-primary text-sm flex items-center justify-center gap-2"
+                >
+                  <span>📷</span>
+                  別の伝票を追加
+                </button>
+
+                {/* 次へ進む */}
+                <button
+                  type="button"
+                  onClick={handleS1Save}
+                  disabled={s1Saving || s1Items.filter((x) => x.selected).length === 0}
+                  className="w-full min-h-12 rounded-xl font-bold text-white disabled:opacity-60 flex items-center justify-center gap-2"
+                  style={{ backgroundColor: PRIMARY }}
+                >
+                  {s1Saving && <Spinner />}
+                  {s1Saving
+                    ? "保存中..."
+                    : `${s1Items.filter((x) => x.selected).length}件を保存して次へ進む`}
+                </button>
+              </div>
+
+            /* 初期撮影UI */
             ) : (
               <div className="bg-white rounded-2xl shadow-sm p-4 space-y-3">
                 <button
@@ -420,11 +515,12 @@ export default function OnboardingPage() {
                 >
                   画像を選択
                 </button>
-                <input ref={cam1} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleS1File} />
-                <input ref={file1} type="file" accept="image/*" className="hidden" onChange={handleS1File} />
                 {s1Error && <p className="text-sm text-red-600 bg-red-50 rounded-xl p-3">{s1Error}</p>}
-                <button type="button" onClick={() => setStep(2)}
-                  className="w-full text-sm text-gray-400 underline pt-1">
+                <button
+                  type="button"
+                  onClick={() => setStep(2)}
+                  className="w-full text-sm text-gray-400 underline pt-1"
+                >
                   伝票がない場合はスキップ
                 </button>
               </div>
@@ -432,7 +528,7 @@ export default function OnboardingPage() {
           </section>
         )}
 
-        {/* Step 2 */}
+        {/* ─── Step 2 ─────────────────────────────────── */}
         {step === 2 && (
           <section className="space-y-4">
             <div className="bg-white rounded-2xl shadow-sm p-4">
@@ -580,7 +676,7 @@ export default function OnboardingPage() {
           </section>
         )}
 
-        {/* Step 3 */}
+        {/* ─── Step 3 ─────────────────────────────────── */}
         {step === 3 && (
           <section className="space-y-4">
             <div className="bg-white rounded-2xl shadow-sm p-4">
@@ -678,7 +774,7 @@ export default function OnboardingPage() {
           </section>
         )}
 
-        {/* Step 4 */}
+        {/* ─── Step 4 ─────────────────────────────────── */}
         {step === 4 && (
           <section className="space-y-4">
             <div className="bg-white rounded-2xl shadow-sm p-4">
