@@ -5,6 +5,11 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
 import { getProduct } from "@/lib/firestore";
+import {
+  formatMoney,
+  formatSalesCount,
+  getGrossProfitLoss,
+} from "@/lib/grossProfitLoss";
 import type { Product } from "@/types";
 import Card from "@/components/ui/Card";
 import GrossProfitLossCard from "@/components/GrossProfitLossCard";
@@ -47,6 +52,9 @@ export default function ProductDetailPage() {
     );
   }
 
+  const { currentCost, changedCost, costDiff, monthlySales, loss } =
+    getGrossProfitLoss(product);
+
   return (
     <main className="min-h-screen bg-gray-50 flex justify-center">
       <div className="w-full max-w-[480px] px-4 py-6 space-y-4">
@@ -84,25 +92,36 @@ export default function ProductDetailPage() {
               </dd>
             </div>
             <div className="flex justify-between">
-              <dt className="text-sm text-gray-500">基準原価</dt>
+              <dt className="text-sm text-gray-500">現在原価</dt>
               <dd className="font-medium text-gray-900">
-                {product.baseCost.toLocaleString()}円
+                {currentCost.toLocaleString()}円
               </dd>
             </div>
             <div className="flex justify-between">
-              <dt className="text-sm text-gray-500">現在原価</dt>
+              <dt className="text-sm text-gray-500">変更後原価</dt>
               <dd className="font-medium text-gray-900">
-                {product.currentCost.toLocaleString()}円
+                {changedCost.toLocaleString()}円
               </dd>
             </div>
-            {product.monthlySales != null && (
-              <div className="flex justify-between">
-                <dt className="text-sm text-gray-500">月間販売数</dt>
-                <dd className="font-medium text-gray-900">
-                  {product.monthlySales.toLocaleString()}食
-                </dd>
-              </div>
-            )}
+            <div className="flex justify-between">
+              <dt className="text-sm text-gray-500">原価差分</dt>
+              <dd className="font-medium text-gray-900">
+                {costDiff >= 0 ? "+" : ""}
+                {costDiff.toLocaleString()}円
+              </dd>
+            </div>
+            <div className="flex justify-between">
+              <dt className="text-sm text-gray-500">月間販売数</dt>
+              <dd className="font-medium text-gray-900">
+                {formatSalesCount(monthlySales)}
+              </dd>
+            </div>
+            <div className="flex justify-between">
+              <dt className="text-sm text-gray-500">月間影響額</dt>
+              <dd className="font-medium text-gray-900">
+                {formatMoney(loss)}
+              </dd>
+            </div>
             {product.monthlyRevenue != null && (
               <div className="flex justify-between">
                 <dt className="text-sm text-gray-500">月間売上</dt>

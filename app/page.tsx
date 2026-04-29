@@ -27,7 +27,7 @@ export default function HomePage() {
 
   const totalLoss = products.reduce((sum, product) => {
     const { loss } = getGrossProfitLoss(product);
-    return sum + loss;
+    return sum + (loss ?? 0);
   }, 0);
 
   const { display, color } = formatGrossProfitLoss(totalLoss);

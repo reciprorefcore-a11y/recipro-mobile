@@ -5,7 +5,11 @@ import Link from "next/link";
 import { useAuth } from "@/hooks/useAuth";
 import { getProducts } from "@/lib/firestore";
 import { seedProducts } from "@/lib/seedData";
-import { getGrossProfitLoss, formatGrossProfitLoss } from "@/lib/grossProfitLoss";
+import {
+  formatGrossProfitLoss,
+  formatSalesCount,
+  getGrossProfitLoss,
+} from "@/lib/grossProfitLoss";
 import type { Product } from "@/types";
 
 const COLOR_MAP = {
@@ -134,7 +138,13 @@ export default function ProductsPage() {
         ) : (
           <div className="space-y-3">
             {filtered.map((product) => {
-              const { loss, accuracyLabel } = getGrossProfitLoss(product);
+              const {
+                currentCost,
+                changedCost,
+                monthlySales,
+                loss,
+                accuracyLabel,
+              } = getGrossProfitLoss(product);
               const { display, color } = formatGrossProfitLoss(loss);
               return (
                 <Link
@@ -155,12 +165,15 @@ export default function ProductsPage() {
                   </div>
                   <div className="flex items-center justify-between mt-1.5">
                     <p className="text-xs text-gray-400">
-                      基準 {product.baseCost}円 → 現在 {product.currentCost}円
+                      現在 {currentCost}円 → 変更後 {changedCost}円
                     </p>
                     <p className="text-xs" style={{ color: "#666666" }}>
                       {accuracyLabel}
                     </p>
                   </div>
+                  <p className="mt-1 text-xs text-gray-500">
+                    月間販売数 {formatSalesCount(monthlySales)}
+                  </p>
                 </Link>
               );
             })}

@@ -33,8 +33,10 @@ export default function GrossProfitLossCard({
   const { display, color } = formatGrossProfitLoss(loss);
   const breakdown = formatBreakdown(costDiff, monthlySales);
 
-  const isLoss = loss > 0;
-  const title = isLoss ? "推定粗利損失" : loss < 0 ? "粗利改善" : "粗利損失";
+  const isLoss = loss !== undefined && loss > 0;
+  const isImprovement = loss !== undefined && loss < 0;
+  const title =
+    loss === undefined ? "月間影響額" : isLoss ? "推定粗利損失" : isImprovement ? "粗利改善" : "粗利損失";
 
   const [modalOpen, setModalOpen] = useState(false);
   const [salesInput, setSalesInput] = useState(
@@ -62,7 +64,7 @@ export default function GrossProfitLossCard({
 
   return (
     <>
-      <Card className={isLoss ? "border-l-4 border-[#D93025]" : loss < 0 ? "border-l-4 border-[#0F9D58]" : ""}>
+      <Card className={isLoss ? "border-l-4 border-[#D93025]" : isImprovement ? "border-l-4 border-[#0F9D58]" : ""}>
         <p className="text-sm text-gray-500 mb-1">{title}</p>
         <p
           className="text-3xl font-bold leading-tight"

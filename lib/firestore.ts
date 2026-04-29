@@ -240,7 +240,7 @@ function productsCol(companyId: string) {
 export async function getProducts(companyId: string): Promise<Product[]> {
   const q = query(productsCol(companyId), orderBy("createdAt", "asc"));
   const snap = await getDocs(q);
-  return snap.docs.map((d) => ({ id: d.id, ...d.data() } as Product));
+  return snap.docs.map((d) => normalizeProduct(d.id, d.data(), companyId));
 }
 
 export async function getProduct(
@@ -249,7 +249,48 @@ export async function getProduct(
 ): Promise<Product | null> {
   const snap = await getDoc(doc(db, "companies", companyId, "products", productId));
   if (!snap.exists()) return null;
-  return { id: snap.id, ...snap.data() } as Product;
+  return normalizeProduct(snap.id, snap.data(), companyId);
+}
+
+function normalizeProduct(
+  id: string,
+  data: Record<string, unknown>,
+  fallbackCompanyId: string
+): Product {
+  const monthlySales = firstNumber(
+    data.monthlySales,
+    data.monthlySalesCount,
+    data.salesCount,
+    data.soldCount,
+    data.monthlyQuantity,
+    data.monthlyOrderCount
+  );
+
+  return {
+    ...(data as Omit<Product, "id" | "companyId">),
+    id,
+    companyId: stringValue(data.companyId) || fallbackCompanyId,
+    name: stringValue(data.name),
+    nameKana: stringValue(data.nameKana),
+    baseCost: numberValue(data.baseCost),
+    currentCost: numberValue(data.currentCost),
+    changedCost: optionalNumber(data.changedCost),
+    price: numberValue(data.price),
+    monthlySales,
+    monthlySalesCount: optionalNumber(data.monthlySalesCount),
+    salesCount: optionalNumber(data.salesCount),
+    soldCount: optionalNumber(data.soldCount),
+    monthlyQuantity: optionalNumber(data.monthlyQuantity),
+    monthlyOrderCount: optionalNumber(data.monthlyOrderCount),
+  } as Product;
+}
+
+function firstNumber(...values: unknown[]): number | undefined {
+  for (const value of values) {
+    const num = optionalNumber(value);
+    if (num !== undefined) return num;
+  }
+  return undefined;
 }
 
 export async function addProduct(

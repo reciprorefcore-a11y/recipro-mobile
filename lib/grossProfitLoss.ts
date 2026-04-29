@@ -3,13 +3,15 @@ import type { Ingredient, Product } from "@/types";
 export type AccuracyLabel =
   | "実入力"
   | "推定(売上ベース)"
-  | "推定(デフォルト)"
+  | "未設定"
   | "レジ連動";
 
 export type GrossProfitLossResult = {
   costDiff: number;
-  monthlySales: number;
-  loss: number;
+  currentCost: number;
+  changedCost: number;
+  monthlySales?: number;
+  loss?: number;
   accuracyLabel: AccuracyLabel;
 };
 
@@ -18,10 +20,17 @@ export type FormatResult = {
   color: "danger" | "success" | "neutral";
 };
 
-export const getMonthlySales = (product: Product): number => {
-  if (product.monthlySales && product.monthlySales > 0) {
-    return product.monthlySales;
-  }
+export const getMonthlySales = (product: Product): number | undefined => {
+  const explicitSales = firstPositiveNumber(
+    product.monthlySales,
+    product.monthlySalesCount,
+    product.salesCount,
+    product.soldCount,
+    product.monthlyQuantity,
+    product.monthlyOrderCount
+  );
+  if (explicitSales !== undefined) return explicitSales;
+
   if (
     product.monthlyRevenue &&
     product.monthlyRevenue > 0 &&
@@ -29,35 +38,56 @@ export const getMonthlySales = (product: Product): number => {
   ) {
     return Math.floor(product.monthlyRevenue / product.price);
   }
-  return 800;
+  return undefined;
 };
 
 export const getAccuracyLabel = (product: Product): AccuracyLabel => {
   // 将来: posSourceId があり POS連携ON なら 'レジ連動'
-  if (product.monthlySales && product.monthlySales > 0) return "実入力";
+  if (
+    firstPositiveNumber(
+      product.monthlySales,
+      product.monthlySalesCount,
+      product.salesCount,
+      product.soldCount,
+      product.monthlyQuantity,
+      product.monthlyOrderCount
+    ) !== undefined
+  ) {
+    return "実入力";
+  }
   if (
     product.monthlyRevenue &&
     product.monthlyRevenue > 0 &&
     product.price > 0
   )
     return "推定(売上ベース)";
-  return "推定(デフォルト)";
+  return "未設定";
 };
 
 export const getGrossProfitLoss = (product: Product): GrossProfitLossResult => {
   const monthlySales = getMonthlySales(product);
-  const costDiff = product.currentCost - product.baseCost;
-  const loss = costDiff * monthlySales;
+  const currentCost = product.baseCost;
+  const changedCost = product.changedCost ?? product.currentCost;
+  const costDiff = changedCost - currentCost;
+  const loss = monthlySales === undefined ? undefined : costDiff * monthlySales;
 
   return {
     costDiff,
+    currentCost,
+    changedCost,
     monthlySales,
     loss,
     accuracyLabel: getAccuracyLabel(product),
   };
 };
 
-export const formatGrossProfitLoss = (loss: number): FormatResult => {
+export const formatGrossProfitLoss = (loss: number | undefined): FormatResult => {
+  if (loss === undefined) {
+    return {
+      display: "未設定",
+      color: "neutral",
+    };
+  }
   if (loss > 0) {
     return {
       display: `-${loss.toLocaleString()}円`,
@@ -77,11 +107,26 @@ export const formatGrossProfitLoss = (loss: number): FormatResult => {
 
 export const formatBreakdown = (
   costDiff: number,
-  monthlySales: number
+  monthlySales: number | undefined
 ): string => {
   const sign = costDiff >= 0 ? "+" : "";
+  if (monthlySales === undefined) {
+    return `(${sign}${costDiff}円 × 月間販売数 未設定)`;
+  }
   return `(${sign}${costDiff}円 × ${monthlySales.toLocaleString()}食)`;
 };
+
+export const formatSalesCount = (monthlySales: number | undefined): string => {
+  return monthlySales === undefined ? "未設定" : `${monthlySales.toLocaleString()}食`;
+};
+
+export const formatMoney = (value: number | undefined): string => {
+  return value === undefined ? "—" : `${value.toLocaleString()}円`;
+};
+
+function firstPositiveNumber(...values: Array<number | undefined>): number | undefined {
+  return values.find((value) => value !== undefined && value > 0);
+}
 
 export const getProductsUsingChangedIngredients = (
   products: Product[],

@@ -9,8 +9,14 @@ export type Product = {
   nameKana: string;
   baseCost: number;
   currentCost: number;
+  changedCost?: number;
   price: number;
+  monthlySalesCount?: number;
   monthlySales?: number;
+  salesCount?: number;
+  soldCount?: number;
+  monthlyQuantity?: number;
+  monthlyOrderCount?: number;
   monthlyRevenue?: number;
   category?: string;
   ingredients?: string[];
