@@ -171,6 +171,15 @@ function normalizeIngredient(
     supplierKana: optionalString(data.supplierKana),
     spec: optionalString(data.spec),
     unit: stringValue(data.unit) || "個",
+    quantity: optionalQuantityValue(data.quantity),
+    packQuantity: optionalQuantityValue(data.packQuantity),
+    lotQuantity: optionalQuantityValue(data.lotQuantity),
+    inputQuantity: optionalQuantityValue(data.inputQuantity),
+    inputQuantityUnit: optionalString(data.inputQuantityUnit),
+    caseQuantity: optionalQuantityValue(data.caseQuantity),
+    irisu: optionalQuantityValue(data.irisu),
+    countPerUnit: optionalQuantityValue(data.countPerUnit),
+    outputQuantity: optionalQuantityValue(data.outputQuantity),
     currentPrice: numberValue(data.currentPrice),
     oldPrice: optionalNumber(data.oldPrice),
     globalCategory: optionalString(data.globalCategory),
@@ -199,6 +208,15 @@ function optionalNumber(value: unknown): number | undefined {
   if (value === undefined || value === null || value === "") return undefined;
   const num = Number(value);
   return Number.isFinite(num) ? num : undefined;
+}
+
+function optionalQuantityValue(value: unknown): string | number | undefined {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string") {
+    const text = value.trim();
+    return text || undefined;
+  }
+  return undefined;
 }
 
 function timestampToIso(value: unknown): string | undefined {

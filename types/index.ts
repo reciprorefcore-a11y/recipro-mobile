@@ -1,5 +1,7 @@
 import type { Timestamp } from "firebase/firestore";
 
+export type QuantityValue = string | number;
+
 export type Product = {
   id: string;
   companyId: string;
@@ -51,6 +53,15 @@ export type Ingredient = {
   supplierKana?: string;
   spec?: string;
   unit: string;
+  quantity?: QuantityValue;
+  packQuantity?: QuantityValue;
+  lotQuantity?: QuantityValue;
+  inputQuantity?: QuantityValue;
+  inputQuantityUnit?: string;
+  caseQuantity?: QuantityValue;
+  irisu?: QuantityValue;
+  countPerUnit?: QuantityValue;
+  outputQuantity?: QuantityValue;
   currentPrice: number;
   oldPrice?: number;
   globalCategory?: string;
