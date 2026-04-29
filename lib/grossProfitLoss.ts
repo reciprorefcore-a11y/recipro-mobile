@@ -1,4 +1,4 @@
-import type { Product } from "@/types";
+import type { Ingredient, Product } from "@/types";
 
 export type AccuracyLabel =
   | "実入力"
@@ -81,4 +81,26 @@ export const formatBreakdown = (
 ): string => {
   const sign = costDiff >= 0 ? "+" : "";
   return `(${sign}${costDiff}円 × ${monthlySales.toLocaleString()}食)`;
+};
+
+export const getProductsUsingChangedIngredients = (
+  products: Product[],
+  changedIngredients: Ingredient[]
+): Product[] => {
+  const changedIds = new Set(
+    changedIngredients.flatMap((ingredient) => [
+      ingredient.id,
+      ingredient.uniqueId,
+      ingredient.myCatalogId,
+    ])
+  );
+
+  return products.filter((product) => {
+    const ingredientIds = product.ingredients ?? [];
+    const usageIds = (product.ingredientUsages ?? []).flatMap((usage) => [
+      usage.ingredientId,
+      usage.uniqueId,
+    ]);
+    return [...ingredientIds, ...usageIds].some((id) => id && changedIds.has(id));
+  });
 };

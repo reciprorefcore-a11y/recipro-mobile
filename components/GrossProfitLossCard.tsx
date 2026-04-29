@@ -77,23 +77,19 @@ export default function GrossProfitLossCard({
         </p>
 
         <div className="flex flex-wrap gap-2 mt-4">
-          <button
-            onClick={() => setModalOpen(true)}
-            className="text-sm px-3 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors"
-          >
-            月間販売数を変更
-          </button>
+          {onMonthlySalesUpdate && (
+            <button
+              onClick={() => setModalOpen(true)}
+              className="text-sm px-3 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors"
+            >
+              月間販売数を変更
+            </button>
+          )}
           <button
             onClick={() => router.push("/search")}
             className="text-sm px-3 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors"
           >
             食材を見直す
-          </button>
-          <button
-            onClick={() => router.push(`/products/${product.id}`)}
-            className="text-sm px-3 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors"
-          >
-            レシピを編集
           </button>
         </div>
       </Card>

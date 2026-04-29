@@ -15,7 +15,7 @@ import {
   Timestamp,
 } from "firebase/firestore";
 import { db } from "./firebase";
-import type { Ingredient, PriceHistory, Product, UserProfile } from "@/types";
+import type { Ingredient, IngredientWrite, PriceHistory, Product, UserProfile } from "@/types";
 
 // ─── User ────────────────────────────────────────────────
 
@@ -47,7 +47,7 @@ function ingredientsCol(companyId: string) {
 export async function getIngredients(companyId: string): Promise<Ingredient[]> {
   const q = query(ingredientsCol(companyId), orderBy("updatedAt", "asc"));
   const snap = await getDocs(q);
-  return snap.docs.map((d) => ({ id: d.id, ...d.data() } as Ingredient));
+  return snap.docs.map((d) => normalizeIngredient(d.id, d.data(), companyId));
 }
 
 export async function getIngredient(
@@ -58,15 +58,17 @@ export async function getIngredient(
     doc(db, "companies", companyId, "ingredients", ingredientId)
   );
   if (!snap.exists()) return null;
-  return { id: snap.id, ...snap.data() } as Ingredient;
+  return normalizeIngredient(snap.id, snap.data(), companyId);
 }
 
 export async function addIngredient(
   companyId: string,
-  data: Omit<Ingredient, "id" | "createdAt" | "updatedAt">
+  data: IngredientWrite
 ): Promise<string> {
   const ref = await addDoc(ingredientsCol(companyId), {
     ...data,
+    companyId,
+    isActive: data.isActive ?? true,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   });
@@ -78,9 +80,14 @@ export async function updateIngredientPrice(
   ingredientId: string,
   newPrice: number
 ): Promise<void> {
+  const current = await getIngredient(companyId, ingredientId);
   await updateDoc(
     doc(db, "companies", companyId, "ingredients", ingredientId),
-    { currentPrice: newPrice, updatedAt: serverTimestamp() }
+    {
+      currentPrice: newPrice,
+      oldPrice: current?.currentPrice ?? null,
+      updatedAt: serverTimestamp(),
+    }
   );
 }
 
@@ -105,6 +112,7 @@ export async function updateIngredientPricesFromReceipt(
 
     batch.update(ingredientRef, {
       currentPrice: newPrice,
+      oldPrice: ingredient.currentPrice,
       updatedAt: serverTimestamp(),
     });
     batch.set(historyRef, {
@@ -117,6 +125,60 @@ export async function updateIngredientPricesFromReceipt(
   });
 
   await batch.commit();
+}
+
+function normalizeIngredient(
+  id: string,
+  data: Record<string, unknown>,
+  fallbackCompanyId: string
+): Ingredient {
+  return {
+    id,
+    uniqueId: stringValue(data.uniqueId) || id,
+    companyId: stringValue(data.companyId) || fallbackCompanyId,
+    ingredientName: stringValue(data.ingredientName),
+    ingredientNameKana: optionalString(data.ingredientNameKana),
+    myCatalogId: optionalString(data.myCatalogId),
+    smaregiCode: optionalString(data.smaregiCode),
+    smaregiDept: optionalString(data.smaregiDept),
+    supplier: optionalString(data.supplier),
+    supplierKana: optionalString(data.supplierKana),
+    spec: optionalString(data.spec),
+    unit: stringValue(data.unit) || "個",
+    currentPrice: numberValue(data.currentPrice),
+    oldPrice: optionalNumber(data.oldPrice),
+    globalCategory: optionalString(data.globalCategory),
+    globalCategoryId: optionalString(data.globalCategoryId),
+    category: optionalString(data.category),
+    updatedAt: timestampToIso(data.updatedAt),
+    isActive: data.isActive !== false,
+  };
+}
+
+function stringValue(value: unknown): string {
+  return typeof value === "string" ? value : "";
+}
+
+function optionalString(value: unknown): string | undefined {
+  const text = stringValue(value).trim();
+  return text || undefined;
+}
+
+function numberValue(value: unknown): number {
+  const num = Number(value);
+  return Number.isFinite(num) ? num : 0;
+}
+
+function optionalNumber(value: unknown): number | undefined {
+  if (value === undefined || value === null || value === "") return undefined;
+  const num = Number(value);
+  return Number.isFinite(num) ? num : undefined;
+}
+
+function timestampToIso(value: unknown): string | undefined {
+  if (value instanceof Timestamp) return value.toDate().toISOString();
+  if (typeof value === "string") return value;
+  return undefined;
 }
 
 // ─── Products ────────────────────────────────────────────

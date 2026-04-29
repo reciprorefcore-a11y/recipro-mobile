@@ -95,18 +95,21 @@ export async function seedAll(
 export async function seedIngredients(companyId: string): Promise<number> {
   const col = collection(db, "companies", companyId, "ingredients");
   await Promise.all(
-    SEED_ITEMS.map((item) => {
+    SEED_ITEMS.map((item, index) => {
       const ts = daysAgo(item.updatedDaysAgo);
       const uniqueId = `${companyId.slice(0, 8)}_${item.ingredientNameKana}`;
       const nameNormalized = item.ingredientName.replace(/[\s　]/g, "");
       return addDoc(col, {
         uniqueId,
+        companyId,
+        myCatalogId: `MC-${String(index + 1).padStart(4, "0")}`,
         ingredientName: item.ingredientName,
         ingredientNameKana: item.ingredientNameKana,
         nameNormalized,
         unit: item.unit,
         currentPrice: item.currentPrice,
         supplier: item.supplier,
+        isActive: true,
         createdAt: ts,
         updatedAt: ts,
       });

@@ -12,9 +12,20 @@ export type Product = {
   monthlyRevenue?: number;
   category?: string;
   ingredients?: string[];
+  ingredientUsages?: ProductIngredientUsage[];
   posSourceId?: string; // 将来用: スマレジ等のPOS商品ID
   updatedAt: Timestamp;
   createdAt: Timestamp;
+};
+
+export type ProductIngredientUsage = {
+  ingredientId: string;
+  uniqueId?: string;
+  ingredientName: string;
+  quantity?: number;
+  unit?: string;
+  currentPrice?: number;
+  changedPrice?: number;
 };
 
 export type UserProfile = {
@@ -30,15 +41,33 @@ export type UserProfile = {
 export type Ingredient = {
   id: string;
   uniqueId: string;
+  companyId: string;
   ingredientName: string;
-  ingredientNameKana: string;
-  nameNormalized: string;
+  ingredientNameKana?: string;
+  myCatalogId?: string;
+  smaregiCode?: string;
+  smaregiDept?: string;
+  supplier?: string;
+  supplierKana?: string;
+  spec?: string;
   unit: string;
   currentPrice: number;
-  supplier?: string;
+  oldPrice?: number;
+  globalCategory?: string;
+  globalCategoryId?: string;
   category?: string;
-  updatedAt: Timestamp;
-  createdAt: Timestamp;
+  updatedAt?: string;
+  isActive: boolean;
+};
+
+export type IngredientWrite = Omit<
+  Ingredient,
+  "id" | "companyId" | "updatedAt" | "isActive"
+> & {
+  companyId?: string;
+  updatedAt?: string;
+  isActive?: boolean;
+  nameNormalized?: string;
 };
 
 export type PriceHistory = {
@@ -54,6 +83,7 @@ export type PriceHistory = {
 export type DetectedItem = {
   name: string;
   ingredientNameKana?: string; // AIが返却、なければ食材名をそのまま使用
+  myCatalogId?: string;
   price: number;
   unit: string;
   quantity?: number; // 購入数量

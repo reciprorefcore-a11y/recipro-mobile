@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useAuth } from "@/hooks/useAuth";
 import { getIngredients, addIngredient } from "@/lib/firestore";
+import { buildReciproMasterPayload } from "@/lib/reciproMasterPayload";
 import { seedIngredients } from "@/lib/seedData";
 import IngredientCard from "@/components/IngredientCard";
 import AddIngredientModal from "@/components/AddIngredientModal";
@@ -25,6 +26,14 @@ export default function SearchPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [seeding, setSeeding] = useState(false);
   const [seedMsg, setSeedMsg] = useState("");
+  const [exportJson, setExportJson] = useState("");
+  const [exporting, setExporting] = useState(false);
+  const [copyMsg, setCopyMsg] = useState("");
+  const [exportCounts, setExportCounts] = useState({
+    updateTargets: 0,
+    needsReview: 0,
+    outputTargets: 0,
+  });
 
   const companyId = user?.uid ?? "";
 
@@ -48,8 +57,8 @@ export default function SearchPage() {
     const q = searchQuery.toLowerCase();
     return (
       item.ingredientName.includes(q) ||
-      item.ingredientNameKana.includes(q) ||
-      item.nameNormalized.includes(q)
+      (item.ingredientNameKana ?? "").includes(q) ||
+      normalizeName(item.ingredientName).includes(q)
     );
   });
 
@@ -75,6 +84,36 @@ export default function SearchPage() {
     const nameNormalized = data.ingredientName.replace(/[\s　]/g, "");
     await addIngredient(companyId, { uniqueId, nameNormalized, ...data });
     await fetchIngredients();
+  };
+
+  const handleBuildReciproJson = async () => {
+    if (!companyId) return;
+    setExporting(true);
+    setCopyMsg("");
+    try {
+      const latestIngredients = await getIngredients(companyId);
+      setIngredients(latestIngredients);
+      const activeIngredients = latestIngredients.filter((item) => item.isActive);
+      setExportCounts({
+        updateTargets: activeIngredients.filter((item) => Boolean(item.myCatalogId)).length,
+        needsReview: activeIngredients.filter((item) => !item.myCatalogId).length,
+        outputTargets: activeIngredients.length,
+      });
+      const payload = buildReciproMasterPayload({
+        customerID: companyId,
+        storeID: "default",
+        ingredients: latestIngredients,
+      });
+      setExportJson(JSON.stringify(payload, null, 2));
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const handleCopyJson = async () => {
+    if (!exportJson) return;
+    await navigator.clipboard.writeText(exportJson);
+    setCopyMsg("コピーしました");
   };
 
   /* データ空(ローディング完了後)のみシードボタンを表示 */
@@ -142,6 +181,79 @@ export default function SearchPage() {
           ＋ 新しい食材を追加
         </button>
 
+        <section className="bg-white rounded-2xl shadow-sm p-4 space-y-3">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h2 className="font-bold text-gray-900">レシプロ反映データ</h2>
+              <p className="text-xs text-gray-500 mt-1">
+                API送信は行わず、確認用JSONのみ作成します。
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={handleBuildReciproJson}
+              disabled={exporting || loading}
+              className="shrink-0 rounded-lg bg-primary px-3 py-2 text-xs font-bold text-white disabled:opacity-60"
+            >
+              {exporting ? "作成中..." : "レシプロ反映データ作成"}
+            </button>
+          </div>
+
+          {exportJson && (
+            <div className="space-y-3">
+              <div className="grid grid-cols-3 gap-2">
+                <ExportCount label="更新対象" value={exportCounts.updateTargets} />
+                <ExportCount label="要確認" value={exportCounts.needsReview} />
+                <ExportCount label="出力対象" value={exportCounts.outputTargets} />
+              </div>
+
+              {ingredients.some((item) => item.isActive && !item.myCatalogId) && (
+                <div className="space-y-1.5">
+                  {ingredients
+                    .filter((item) => item.isActive && !item.myCatalogId)
+                    .slice(0, 5)
+                    .map((item) => (
+                      <div
+                        key={item.id}
+                        className="flex items-center justify-between gap-2 rounded-lg bg-amber-50 px-3 py-2"
+                      >
+                        <span className="truncate text-xs font-medium text-amber-900">
+                          {item.ingredientName}
+                        </span>
+                        <span className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-bold text-amber-700">
+                          マイカタログID未設定
+                        </span>
+                      </div>
+                    ))}
+                  {exportCounts.needsReview > 5 && (
+                    <p className="text-xs text-amber-700">
+                      ほか {exportCounts.needsReview - 5}件のマイカタログIDが未設定です
+                    </p>
+                  )}
+                </div>
+              )}
+
+              <textarea
+                readOnly
+                value={exportJson}
+                className="h-64 w-full resize-y rounded-xl border border-gray-200 bg-gray-50 p-3 font-mono text-xs text-gray-700 outline-none"
+              />
+              <button
+                type="button"
+                onClick={handleCopyJson}
+                className="w-full rounded-xl border border-primary py-3 text-sm font-bold text-primary hover:bg-orange-50"
+              >
+                JSONをコピー
+              </button>
+              {copyMsg && (
+                <p className="text-center text-xs font-medium text-green-700">
+                  {copyMsg}
+                </p>
+              )}
+            </div>
+          )}
+        </section>
+
         <p className="text-sm text-gray-500 font-medium">
           食材一覧 ({filtered.length}件)
         </p>
@@ -168,4 +280,17 @@ export default function SearchPage() {
       />
     </main>
   );
+}
+
+function ExportCount({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-xl bg-gray-50 px-2 py-2 text-center">
+      <p className="text-[11px] text-gray-500">{label}</p>
+      <p className="text-lg font-bold text-gray-900">{value}</p>
+    </div>
+  );
+}
+
+function normalizeName(value: string) {
+  return value.trim().toLowerCase().replace(/[\s　]/g, "");
 }

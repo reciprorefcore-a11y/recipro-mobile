@@ -559,12 +559,24 @@ function matchDetectedItems(
   ingredients: Ingredient[]
 ): MatchedItem[] {
   return detectedItems.map((item) => {
-    const exact = ingredients.find((ing) => ing.ingredientName === item.name);
+    if (item.myCatalogId) {
+      const catalogMatched = ingredients.find(
+        (ing) => ing.myCatalogId === item.myCatalogId
+      );
+      if (catalogMatched) return toMatchedItem(item, catalogMatched, "exact");
+    }
+
+    const exact = ingredients.find(
+      (ing) =>
+        ing.ingredientName === item.name &&
+        Boolean(item.ingredientNameKana) &&
+        ing.ingredientNameKana === item.ingredientNameKana
+    );
     if (exact) return toMatchedItem(item, exact, "exact");
 
     const normalizedName = normalizeName(item.name);
     const normalized = ingredients.find((ing) =>
-      [ing.ingredientName, ing.ingredientNameKana, ing.nameNormalized]
+      [ing.ingredientName, ing.ingredientNameKana]
         .map(normalizeName)
         .includes(normalizedName)
     );
@@ -572,7 +584,7 @@ function matchDetectedItems(
 
     const partial = ingredients.find((ing) => {
       const candidates = [
-        ing.ingredientName, ing.ingredientNameKana, ing.nameNormalized,
+        ing.ingredientName, ing.ingredientNameKana,
       ].map(normalizeName);
       return candidates.some(
         (c) =>
@@ -603,8 +615,8 @@ function toMatchedItem(
   };
 }
 
-function normalizeName(value: string) {
-  return value
+function normalizeName(value: string | undefined) {
+  return (value ?? "")
     .trim()
     .toLowerCase()
     .replace(/[\s　]/g, "")

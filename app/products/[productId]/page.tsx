@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
-import { getProduct, updateProduct } from "@/lib/firestore";
+import { getProduct } from "@/lib/firestore";
 import type { Product } from "@/types";
 import Card from "@/components/ui/Card";
 import GrossProfitLossCard from "@/components/GrossProfitLossCard";
@@ -25,12 +25,6 @@ export default function ProductDetailPage() {
       .then((data) => setProduct(data))
       .finally(() => setLoading(false));
   }, [companyId, productId]);
-
-  const handleMonthlySalesUpdate = async (sales: number) => {
-    if (!product || !companyId) return;
-    await updateProduct(companyId, product.id, { monthlySales: sales });
-    setProduct((prev) => (prev ? { ...prev, monthlySales: sales } : prev));
-  };
 
   if (loading) {
     return (
@@ -75,10 +69,7 @@ export default function ProductDetailPage() {
           <h1 className="text-xl font-bold">{product.name}</h1>
         </div>
 
-        <GrossProfitLossCard
-          product={product}
-          onMonthlySalesUpdate={handleMonthlySalesUpdate}
-        />
+        <GrossProfitLossCard product={product} />
 
         <Card>
           <dl className="space-y-2.5">
@@ -127,6 +118,44 @@ export default function ProductDetailPage() {
               </div>
             )}
           </dl>
+        </Card>
+
+        <Card>
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="font-bold text-gray-900">使用食材一覧</h2>
+            <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-500">
+              参照専用
+            </span>
+          </div>
+          {product.ingredientUsages && product.ingredientUsages.length > 0 ? (
+            <div className="mt-3 space-y-2">
+              {product.ingredientUsages.map((usage) => (
+                <div
+                  key={`${usage.ingredientId}-${usage.ingredientName}`}
+                  className="rounded-xl bg-gray-50 px-3 py-2"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="font-medium text-gray-900">{usage.ingredientName}</p>
+                    {usage.currentPrice != null && (
+                      <p className="text-sm font-semibold text-gray-700">
+                        {usage.currentPrice.toLocaleString()}円
+                      </p>
+                    )}
+                  </div>
+                  {usage.quantity != null && (
+                    <p className="mt-0.5 text-xs text-gray-500">
+                      使用量 {usage.quantity}
+                      {usage.unit ?? ""}
+                    </p>
+                  )}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="mt-3 text-sm text-gray-500">
+              使用食材データは未登録です。
+            </p>
+          )}
         </Card>
       </div>
     </main>

@@ -80,7 +80,7 @@ export default function ProductsPage() {
             />
             戻る
           </Link>
-          <h1 className="text-xl font-bold">商品マスタ</h1>
+          <h1 className="text-xl font-bold">原価影響メニュー</h1>
         </div>
 
         {/* データ空(ローディング完了後)のみ表示 */}
@@ -115,15 +115,12 @@ export default function ProductsPage() {
           />
         </div>
 
-        <Link
-          href="/products/new"
-          className="block w-full py-3 rounded-xl border-2 border-dashed border-primary text-primary font-semibold hover:bg-orange-50 transition-colors text-center"
-        >
-          ＋ 新しい商品を追加
-        </Link>
+        <div className="rounded-xl bg-white px-4 py-3 text-sm text-gray-600 shadow-sm">
+          商品リストは参照専用です。編集は食材マスタで行います。
+        </div>
 
         <p className="text-sm text-gray-500 font-medium">
-          商品一覧 ({filtered.length}件)
+          原価影響メニュー ({filtered.length}件)
         </p>
 
         {loading ? (
