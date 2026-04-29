@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "./providers";
 import AuthGuard from "@/components/AuthGuard";
+import BottomNavigation from "@/components/BottomNavigation";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -29,9 +30,15 @@ export default function RootLayout({
       lang="ja"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">
+      <body className="min-h-full flex flex-col bg-bg">
         <AuthProvider>
-          <AuthGuard>{children}</AuthGuard>
+          <AuthGuard>
+            {/* ボトムナビの高さ分だけコンテンツ下部に余白 */}
+            <div style={{ paddingBottom: "calc(60px + env(safe-area-inset-bottom, 0px))" }}>
+              {children}
+            </div>
+          </AuthGuard>
+          <BottomNavigation />
         </AuthProvider>
       </body>
     </html>

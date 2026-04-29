@@ -1,8 +1,8 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #F5F5F5;
+  --foreground: #333333;
 }
 
 @theme inline {
@@ -10,21 +10,30 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+
+  /* Brand */
   --color-primary: #E85D2C;
+  --color-primary-hover: #C04A1F;
+  --color-primary-light: #FFF5F0;
+
+  /* Semantic */
   --color-danger: #D93025;
   --color-success: #0F9D58;
-  --color-warning: #FFA000;
-}
+  --color-warning: #FFAA00;
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  /* Text */
+  --color-text: #333333;
+  --color-sub-text: #666666;
+  --color-muted: #999999;
+
+  /* Surface */
+  --color-bg: #F5F5F5;
+  --color-white: #FFFFFF;
 }
 
 body {
   background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  color: #333333;
+  font-family: "Noto Sans JP", "Hiragino Kaku Gothic ProN", "Yu Gothic UI",
+    "Yu Gothic", sans-serif;
 }

@@ -9,7 +9,10 @@ import {
   writeBatch,
   query,
   orderBy,
+  where,
+  limit,
   serverTimestamp,
+  Timestamp,
 } from "firebase/firestore";
 import { db } from "./firebase";
 import type { Ingredient, PriceHistory, Product, UserProfile } from "@/types";
@@ -171,4 +174,21 @@ export async function addPriceHistory(
     ...data,
     recordedAt: serverTimestamp(),
   });
+}
+
+export async function getRecentPriceHistory(
+  companyId: string,
+  days = 30
+): Promise<PriceHistory[]> {
+  const since = Timestamp.fromDate(
+    new Date(Date.now() - days * 24 * 60 * 60 * 1000)
+  );
+  const q = query(
+    collection(db, "companies", companyId, "priceHistory"),
+    where("recordedAt", ">=", since),
+    orderBy("recordedAt", "desc"),
+    limit(100)
+  );
+  const snap = await getDocs(q);
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() } as PriceHistory));
 }
