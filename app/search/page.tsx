@@ -36,8 +36,19 @@ export default function SearchPage() {
 
   useEffect(() => {
     if (!companyId) return;
-    fetchIngredients().finally(() => setLoading(false));
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    let ignore = false;
+
+    getIngredients(companyId)
+      .then((data) => {
+        if (!ignore) setIngredients(data);
+      })
+      .finally(() => {
+        if (!ignore) setLoading(false);
+      });
+
+    return () => {
+      ignore = true;
+    };
   }, [companyId]);
 
   const filtered = ingredients.filter((item) => {

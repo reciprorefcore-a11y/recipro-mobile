@@ -1,5 +1,22 @@
 import type { Timestamp } from "firebase/firestore";
 
+export type Product = {
+  id: string;
+  companyId: string;
+  name: string;
+  nameKana: string;
+  baseCost: number;
+  currentCost: number;
+  price: number;
+  monthlySales?: number;
+  monthlyRevenue?: number;
+  category?: string;
+  ingredients?: string[];
+  posSourceId?: string; // 将来用: スマレジ等のPOS商品ID
+  updatedAt: Timestamp;
+  createdAt: Timestamp;
+};
+
 export type UserProfile = {
   uid: string;
   email: string;
@@ -29,5 +46,25 @@ export type PriceHistory = {
   ingredientId: string;
   ingredientName: string;
   price: number;
+  source?: "manual" | "receipt_ai";
   recordedAt: Timestamp;
+};
+
+export type DetectedItem = {
+  name: string;
+  price: number;
+  unit: string;
+  confidence: number;
+};
+
+export type ReceiptAnalysisResult = {
+  items: DetectedItem[];
+  notes?: string;
+};
+
+export type MatchedItem = DetectedItem & {
+  matchedIngredient?: Ingredient;
+  matchType: "exact" | "normalized" | "partial" | "new";
+  oldPrice?: number;
+  selected: boolean;
 };
