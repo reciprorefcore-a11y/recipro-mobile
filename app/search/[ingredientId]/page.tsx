@@ -2,14 +2,22 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useRouter, useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
-import { getIngredient, updateIngredientPrice, addPriceHistory } from "@/lib/firestore";
+import {
+  addPriceHistory,
+  getIngredient,
+  updateIngredient,
+} from "@/lib/firestore";
 import { formatDaysAgo } from "@/lib/utils";
 import type { Ingredient } from "@/types";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import Input from "@/components/ui/Input";
+
+const UNITS = ["kg", "g", "個", "L", "ml", "本", "袋", "ケース", "パック", "枚", "cc"];
+
+type EditMode = "main" | "advanced";
 
 export default function IngredientDetailPage() {
   const { user } = useAuth();
@@ -18,42 +26,124 @@ export default function IngredientDetailPage() {
   const ingredientId = params.ingredientId as string;
 
   const [ingredient, setIngredient] = useState<Ingredient | null>(null);
-  const [newPrice, setNewPrice] = useState("");
+  const [mode, setMode] = useState<EditMode>("main");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
+  const [currentPrice, setCurrentPrice] = useState("");
+  const [oldPrice, setOldPrice] = useState("");
+  const [supplier, setSupplier] = useState("");
+  const [spec, setSpec] = useState("");
+  const [unit, setUnit] = useState("kg");
+  const [isActive, setIsActive] = useState(true);
+
+  const [ingredientName, setIngredientName] = useState("");
+  const [ingredientNameKana, setIngredientNameKana] = useState("");
+  const [myCatalogId, setMyCatalogId] = useState("");
+  const [supplierKana, setSupplierKana] = useState("");
+  const [category, setCategory] = useState("");
+
   const companyId = user?.uid ?? "";
+
+  const syncForm = (item: Ingredient) => {
+    setCurrentPrice(String(item.currentPrice));
+    setOldPrice(item.oldPrice == null ? "" : String(item.oldPrice));
+    setSupplier(item.supplier ?? "");
+    setSpec(item.spec ?? "");
+    setUnit(item.unit || "kg");
+    setIsActive(item.isActive);
+    setIngredientName(item.ingredientName);
+    setIngredientNameKana(item.ingredientNameKana ?? "");
+    setMyCatalogId(item.myCatalogId ?? "");
+    setSupplierKana(item.supplierKana ?? "");
+    setCategory(item.category ?? "");
+  };
 
   useEffect(() => {
     if (!companyId || !ingredientId) return;
+    let ignore = false;
     getIngredient(companyId, ingredientId)
-      .then((data) => setIngredient(data))
-      .finally(() => setLoading(false));
+      .then((data) => {
+        if (ignore) return;
+        setIngredient(data);
+        if (data) syncForm(data);
+      })
+      .finally(() => {
+        if (!ignore) setLoading(false);
+      });
+    return () => {
+      ignore = true;
+    };
   }, [companyId, ingredientId]);
 
-  const handleSave = async (e: React.FormEvent) => {
+  const handleMainSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!ingredient || !companyId) return;
-    const price = Number(newPrice);
-    if (isNaN(price) || price <= 0) {
-      setError("有効な価格を入力してください");
+
+    const nextPrice = toRequiredNumber(currentPrice, "現在単価");
+    const nextOldPrice = toOptionalNumber(oldPrice, "旧単価");
+    if (nextPrice.error || nextOldPrice.error) {
+      setError(nextPrice.error || nextOldPrice.error || "");
       return;
     }
+
     setSaving(true);
     setError("");
     try {
-      await updateIngredientPrice(companyId, ingredient.id, price);
-      await addPriceHistory(companyId, {
-        ingredientId: ingredient.id,
-        ingredientName: ingredient.ingredientName,
-        price,
+      await updateIngredient(companyId, ingredient.id, {
+        currentPrice: nextPrice.value,
+        oldPrice: nextOldPrice.value,
+        supplier: supplier.trim(),
+        spec: spec.trim(),
+        unit,
+        isActive,
+      });
+
+      if (nextPrice.value !== ingredient.currentPrice) {
+        await addPriceHistory(companyId, {
+          ingredientId: ingredient.id,
+          ingredientName: ingredient.ingredientName,
+          price: nextPrice.value,
+        });
+      }
+
+      router.push("/search");
+    } catch (err: unknown) {
+      setError(getErrorMessage(err));
+      setSaving(false);
+    }
+  };
+
+  const handleAdvancedSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!ingredient || !companyId) return;
+    if (!ingredientName.trim()) {
+      setError("商品名を入力してください");
+      return;
+    }
+
+    setSaving(true);
+    setError("");
+    try {
+      await updateIngredient(companyId, ingredient.id, {
+        ingredientName: ingredientName.trim(),
+        ingredientNameKana: ingredientNameKana.trim(),
+        myCatalogId: myCatalogId.trim(),
+        supplierKana: supplierKana.trim(),
+        category: category.trim(),
       });
       router.push("/search");
     } catch (err: unknown) {
-      const fe = err as { message?: string };
-      setError(fe.message || "保存に失敗しました");
+      setError(getErrorMessage(err));
       setSaving(false);
+    }
+  };
+
+  const handleOpenAdvanced = () => {
+    if (window.confirm("マスタ情報を変更しますか？")) {
+      setError("");
+      setMode("advanced");
     }
   };
 
@@ -81,77 +171,317 @@ export default function IngredientDetailPage() {
   return (
     <main className="min-h-screen bg-gray-50 flex justify-center">
       <div className="w-full max-w-[480px] px-4 py-6 space-y-4">
-
-        {/* ヘッダー */}
         <div className="flex items-center gap-3">
-          <Link
-            href="/search"
+          <button
+            type="button"
+            onClick={() => (mode === "advanced" ? setMode("main") : router.push("/search"))}
             className="flex items-center gap-1 text-gray-500 hover:text-gray-700 font-medium"
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/icons/icon-arrow-right.svg" alt="" width={16} height={16}
-              style={{ filter: "brightness(0) opacity(0.5)", transform: "rotate(180deg)" }} />
+            <img
+              src="/icons/icon-arrow-right.svg"
+              alt=""
+              width={16}
+              height={16}
+              style={{ filter: "brightness(0) opacity(0.5)", transform: "rotate(180deg)" }}
+            />
             戻る
-          </Link>
-          <h1 className="text-xl font-bold">{ingredient.ingredientName}</h1>
+          </button>
+          <h1 className="text-xl font-bold">
+            {mode === "advanced" ? "詳細設定" : "食材編集"}
+          </h1>
         </div>
 
-        {/* 食材情報カード */}
-        <Card>
-          <dl className="space-y-2.5">
-            <div className="flex justify-between">
-              <dt className="text-sm text-gray-500">食材名</dt>
-              <dd className="font-medium text-gray-900">{ingredient.ingredientName}</dd>
-            </div>
-            <div className="flex justify-between">
-              <dt className="text-sm text-gray-500">単位</dt>
-              <dd className="font-medium text-gray-900">{ingredient.unit}</dd>
-            </div>
-            {ingredient.supplier && (
-              <div className="flex justify-between">
-                <dt className="text-sm text-gray-500">仕入先</dt>
-                <dd className="font-medium text-gray-900">{ingredient.supplier}</dd>
-              </div>
-            )}
-            <div className="flex justify-between">
-              <dt className="text-sm text-gray-500">最終更新</dt>
-              <dd className="font-medium text-gray-600">
-                {formatDaysAgo(ingredient.updatedAt)}
-              </dd>
-            </div>
-          </dl>
-        </Card>
-
-        {/* 現在価格 */}
-        <Card>
-          <p className="text-sm text-gray-500 mb-1">現在の価格</p>
-          <p className="text-3xl font-bold text-gray-900">
-            {ingredient.currentPrice.toLocaleString()}円
-            <span className="text-base font-normal text-gray-500">/{ingredient.unit}</span>
-          </p>
-        </Card>
-
-        {/* 価格更新フォーム */}
-        <Card>
-          <form onSubmit={handleSave} className="space-y-4">
-            <Input
-              label="新しい価格 (円)"
-              type="number"
-              value={newPrice}
-              onChange={(e) => setNewPrice(e.target.value)}
-              placeholder={`例: ${ingredient.currentPrice}`}
-              min="0"
-              required
-            />
-            {error && (
-              <p className="text-sm text-red-500 bg-red-50 rounded-xl p-3">{error}</p>
-            )}
-            <Button type="submit" disabled={saving} className="w-full">
-              {saving ? "保存中..." : "価格を保存"}
-            </Button>
-          </form>
-        </Card>
+        {mode === "main" ? (
+          <MainEditView
+            ingredient={ingredient}
+            currentPrice={currentPrice}
+            oldPrice={oldPrice}
+            supplier={supplier}
+            spec={spec}
+            unit={unit}
+            isActive={isActive}
+            saving={saving}
+            error={error}
+            onCurrentPriceChange={setCurrentPrice}
+            onOldPriceChange={setOldPrice}
+            onSupplierChange={setSupplier}
+            onSpecChange={setSpec}
+            onUnitChange={setUnit}
+            onActiveChange={setIsActive}
+            onSubmit={handleMainSave}
+            onOpenAdvanced={handleOpenAdvanced}
+          />
+        ) : (
+          <AdvancedEditView
+            ingredient={ingredient}
+            ingredientName={ingredientName}
+            ingredientNameKana={ingredientNameKana}
+            myCatalogId={myCatalogId}
+            supplierKana={supplierKana}
+            category={category}
+            saving={saving}
+            error={error}
+            onIngredientNameChange={setIngredientName}
+            onIngredientNameKanaChange={setIngredientNameKana}
+            onMyCatalogIdChange={setMyCatalogId}
+            onSupplierKanaChange={setSupplierKana}
+            onCategoryChange={setCategory}
+            onSubmit={handleAdvancedSave}
+          />
+        )}
       </div>
     </main>
   );
+}
+
+function MainEditView({
+  ingredient,
+  currentPrice,
+  oldPrice,
+  supplier,
+  spec,
+  unit,
+  isActive,
+  saving,
+  error,
+  onCurrentPriceChange,
+  onOldPriceChange,
+  onSupplierChange,
+  onSpecChange,
+  onUnitChange,
+  onActiveChange,
+  onSubmit,
+  onOpenAdvanced,
+}: {
+  ingredient: Ingredient;
+  currentPrice: string;
+  oldPrice: string;
+  supplier: string;
+  spec: string;
+  unit: string;
+  isActive: boolean;
+  saving: boolean;
+  error: string;
+  onCurrentPriceChange: (value: string) => void;
+  onOldPriceChange: (value: string) => void;
+  onSupplierChange: (value: string) => void;
+  onSpecChange: (value: string) => void;
+  onUnitChange: (value: string) => void;
+  onActiveChange: (value: boolean) => void;
+  onSubmit: (e: React.FormEvent) => void;
+  onOpenAdvanced: () => void;
+}) {
+  return (
+    <>
+      <Card>
+        <p className="text-2xl font-bold leading-tight text-gray-900">
+          {ingredient.ingredientName}
+        </p>
+        <p className="mt-1 text-xs text-gray-400">
+          マイカタログID: {ingredient.myCatalogId || "未設定"}
+        </p>
+        <p className="mt-3 text-xs text-gray-500">
+          最終更新: {formatDaysAgo(ingredient.updatedAt)}
+        </p>
+      </Card>
+
+      <Card>
+        <form onSubmit={onSubmit} className="space-y-4">
+          <Input
+            label="現在単価 (円)"
+            type="number"
+            value={currentPrice}
+            onChange={(e) => onCurrentPriceChange(e.target.value)}
+            min="0"
+            required
+          />
+          <Input
+            label="旧単価 (円)"
+            type="number"
+            value={oldPrice}
+            onChange={(e) => onOldPriceChange(e.target.value)}
+            min="0"
+          />
+          <Input
+            label="仕入先"
+            value={supplier}
+            onChange={(e) => onSupplierChange(e.target.value)}
+            placeholder="例: 田中精肉店"
+          />
+          <Input
+            label="規格"
+            value={spec}
+            onChange={(e) => onSpecChange(e.target.value)}
+            placeholder="例: 1kg袋"
+          />
+          <div>
+            <label className="block text-sm font-medium mb-1">単位</label>
+            <select
+              value={unit}
+              onChange={(e) => onUnitChange(e.target.value)}
+              className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-[16px] outline-none focus:ring-2 focus:ring-primary"
+            >
+              {UNITS.map((item) => (
+                <option key={item} value={item}>
+                  {item}
+                </option>
+              ))}
+            </select>
+          </div>
+          <label className="flex items-center justify-between rounded-xl border border-gray-200 px-4 py-3">
+            <span>
+              <span className="block text-sm font-medium text-gray-900">有効</span>
+              <span className="block text-xs text-gray-500">
+                無効にするとレシプロ反映JSONから除外されます
+              </span>
+            </span>
+            <input
+              type="checkbox"
+              checked={isActive}
+              onChange={(e) => onActiveChange(e.target.checked)}
+              className="h-5 w-5 accent-[#E85D2C]"
+            />
+          </label>
+
+          {error && (
+            <p className="text-sm text-red-500 bg-red-50 rounded-xl p-3">{error}</p>
+          )}
+          <Button type="submit" disabled={saving} className="w-full">
+            {saving ? "保存中..." : "保存"}
+          </Button>
+        </form>
+      </Card>
+
+      <div className="flex justify-end">
+        <button
+          type="button"
+          onClick={onOpenAdvanced}
+          className="rounded-lg bg-gray-100 px-3 py-2 text-xs font-medium text-gray-600 hover:bg-gray-200"
+        >
+          詳細設定
+        </button>
+      </div>
+    </>
+  );
+}
+
+function AdvancedEditView({
+  ingredient,
+  ingredientName,
+  ingredientNameKana,
+  myCatalogId,
+  supplierKana,
+  category,
+  saving,
+  error,
+  onIngredientNameChange,
+  onIngredientNameKanaChange,
+  onMyCatalogIdChange,
+  onSupplierKanaChange,
+  onCategoryChange,
+  onSubmit,
+}: {
+  ingredient: Ingredient;
+  ingredientName: string;
+  ingredientNameKana: string;
+  myCatalogId: string;
+  supplierKana: string;
+  category: string;
+  saving: boolean;
+  error: string;
+  onIngredientNameChange: (value: string) => void;
+  onIngredientNameKanaChange: (value: string) => void;
+  onMyCatalogIdChange: (value: string) => void;
+  onSupplierKanaChange: (value: string) => void;
+  onCategoryChange: (value: string) => void;
+  onSubmit: (e: React.FormEvent) => void;
+}) {
+  return (
+    <>
+      <div className="rounded-xl bg-amber-50 px-4 py-3 text-sm font-medium text-amber-800">
+        この変更はレシプロ連携に影響します。内容を確認のうえ編集してください
+      </div>
+
+      <Card>
+        <form onSubmit={onSubmit} className="space-y-4">
+          <Input
+            label="商品名"
+            value={ingredientName}
+            onChange={(e) => onIngredientNameChange(e.target.value)}
+            required
+          />
+          <Input
+            label="商品名カナ"
+            value={ingredientNameKana}
+            onChange={(e) => onIngredientNameKanaChange(e.target.value)}
+          />
+          <Input
+            label="マイカタログID"
+            value={myCatalogId}
+            onChange={(e) => onMyCatalogIdChange(e.target.value)}
+          />
+          <Input
+            label="取引先名カナ"
+            value={supplierKana}
+            onChange={(e) => onSupplierKanaChange(e.target.value)}
+          />
+          <Input
+            label="カテゴリ"
+            value={category}
+            onChange={(e) => onCategoryChange(e.target.value)}
+          />
+
+          {error && (
+            <p className="text-sm text-red-500 bg-red-50 rounded-xl p-3">{error}</p>
+          )}
+          <Button type="submit" disabled={saving} className="w-full">
+            {saving ? "保存中..." : "詳細設定を保存"}
+          </Button>
+        </form>
+      </Card>
+
+      <Card>
+        <h2 className="font-bold text-gray-900">編集不可項目</h2>
+        <dl className="mt-3 space-y-2.5">
+          <ReadonlyRow label="Firestore ID" value={ingredient.id} />
+          <ReadonlyRow label="uniqueId" value={ingredient.uniqueId} />
+          <ReadonlyRow label="companyId" value={ingredient.companyId} />
+          <ReadonlyRow label="smaregiCode" value={ingredient.smaregiCode} />
+          <ReadonlyRow label="smaregiDept" value={ingredient.smaregiDept} />
+          <ReadonlyRow label="globalCategory" value={ingredient.globalCategory} />
+          <ReadonlyRow label="globalCategoryId" value={ingredient.globalCategoryId} />
+        </dl>
+      </Card>
+    </>
+  );
+}
+
+function ReadonlyRow({ label, value }: { label: string; value?: string }) {
+  return (
+    <div className="flex justify-between gap-3">
+      <dt className="shrink-0 text-sm text-gray-500">{label}</dt>
+      <dd className="min-w-0 break-all text-right text-sm font-medium text-gray-700">
+        {value || "未設定"}
+      </dd>
+    </div>
+  );
+}
+
+function toRequiredNumber(value: string, label: string) {
+  const num = Number(value);
+  if (!Number.isFinite(num) || num < 0) {
+    return { error: `${label}は0以上の数値で入力してください`, value: 0 };
+  }
+  return { error: "", value: num };
+}
+
+function toOptionalNumber(value: string, label: string) {
+  if (!value.trim()) return { error: "", value: undefined };
+  return toRequiredNumber(value, label);
+}
+
+function getErrorMessage(error: unknown) {
+  if (error instanceof Error && error.message) return error.message;
+  return "保存に失敗しました";
 }

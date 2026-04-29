@@ -91,6 +91,32 @@ export async function updateIngredientPrice(
   );
 }
 
+export async function updateIngredient(
+  companyId: string,
+  ingredientId: string,
+  data: Partial<
+    Pick<
+      Ingredient,
+      | "ingredientName"
+      | "ingredientNameKana"
+      | "myCatalogId"
+      | "supplier"
+      | "supplierKana"
+      | "spec"
+      | "unit"
+      | "currentPrice"
+      | "oldPrice"
+      | "category"
+      | "isActive"
+    >
+  >
+): Promise<void> {
+  await updateDoc(doc(db, "companies", companyId, "ingredients", ingredientId), {
+    ...toFirestoreUpdateData(data),
+    updatedAt: serverTimestamp(),
+  });
+}
+
 export async function updateIngredientPricesFromReceipt(
   companyId: string,
   updates: { ingredient: Ingredient; newPrice: number }[]
@@ -179,6 +205,12 @@ function timestampToIso(value: unknown): string | undefined {
   if (value instanceof Timestamp) return value.toDate().toISOString();
   if (typeof value === "string") return value;
   return undefined;
+}
+
+function toFirestoreUpdateData(data: Record<string, unknown>) {
+  return Object.fromEntries(
+    Object.entries(data).map(([key, value]) => [key, value === undefined ? null : value])
+  );
 }
 
 // ─── Products ────────────────────────────────────────────
