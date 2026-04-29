@@ -17,13 +17,10 @@ export default function AiWorkflowPanel({ result, onConfirm, onRevise }: Props) 
       <section className="bg-white rounded-2xl shadow-sm p-4 space-y-4">
         <div>
           <p className="text-xs font-semibold text-primary">確認</p>
-          <h2 className="mt-1 text-lg font-bold text-gray-900">
+          <h2 className="mt-1 text-2xl font-bold text-gray-900">
             AIが{result.menuCandidates.length}商品を読み取りました
           </h2>
-          <p className="mt-1 text-sm text-gray-600">
-            以下のメニュー候補を商品リストに追加してよろしいですか？
-          </p>
-          <p className="mt-1 text-sm text-gray-500">
+          <p className="mt-2 text-sm text-gray-500">
             使用食材も自動で予測されています。
           </p>
         </div>
@@ -74,7 +71,7 @@ export default function AiWorkflowPanel({ result, onConfirm, onRevise }: Props) 
           <button
             type="button"
             onClick={onRevise}
-            className="min-h-12 rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm font-bold text-gray-700"
+            className="min-h-12 rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm font-bold text-gray-700"
           >
             修正する
           </button>
@@ -86,11 +83,11 @@ export default function AiWorkflowPanel({ result, onConfirm, onRevise }: Props) 
   return (
     <section className="bg-white rounded-2xl shadow-sm p-4 space-y-4">
       <div className="rounded-xl border-l-4 border-[#D93025] bg-red-50 px-4 py-3">
-        <p className="text-sm font-semibold text-red-700">推定損失額</p>
-        <p className="mt-1 text-3xl font-bold text-red-700">
+        <p className="text-sm font-semibold" style={{ color: "#D93025" }}>推定損失額</p>
+        <p className="mt-1 text-3xl font-bold" style={{ color: "#D93025" }}>
           {formatLoss(result.estimatedMonthlyLoss)} / 月
         </p>
-        <p className="mt-2 text-sm text-red-800">
+        <p className="mt-2 text-sm" style={{ color: "#D93025" }}>
           現在のメニュー構成では、月間 {formatLoss(result.estimatedMonthlyLoss)} の損失が見込まれます。
         </p>
       </div>
@@ -114,7 +111,8 @@ export default function AiWorkflowPanel({ result, onConfirm, onRevise }: Props) 
         </button>
         <button
           type="button"
-          className="min-h-12 rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm font-bold text-gray-700"
+          onClick={onRevise}
+          className="min-h-12 rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm font-bold text-gray-700"
         >
           あとで確認する
         </button>
