@@ -17,11 +17,12 @@ import {
   addPriceHistory,
 } from "@/lib/firestore";
 import type {
+  AiWorkflowResult,
   DetectedItem,
   Ingredient,
   MatchedItem,
-  ReceiptAnalysisResult,
 } from "@/types";
+import AiWorkflowPanel from "@/components/AiWorkflowPanel";
 
 const PRIMARY = "#E85D2C";
 const UNITS = [
@@ -40,6 +41,8 @@ export default function ReceiptPage() {
   const [previewUrl, setPreviewUrl] = useState("");
   const [ingredients, setIngredients] = useState<Ingredient[]>([]);
   const [matchedItems, setMatchedItems] = useState<MatchedItem[]>([]);
+  const [aiResult, setAiResult] = useState<AiWorkflowResult | null>(null);
+  const [revisionMode, setRevisionMode] = useState(false);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -71,37 +74,46 @@ export default function ReceiptPage() {
     if (!file) return;
     setError("");
     setMatchedItems([]);
+    setAiResult(null);
+    setRevisionMode(false);
     setDoneMessage("");
     try {
       const compressed = await compressImage(file);
       setImageBase64(compressed);
       setPreviewUrl(compressed);
+      await runAiWorkflow(compressed);
     } catch {
       setError("もう一度撮影してください");
     }
   };
 
   // ─ AI 解析 ─
-  const handleAnalyze = async () => {
-    if (!imageBase64 || !user || !companyId) return;
+  const runAiWorkflow = async (targetImageBase64: string) => {
+    if (!targetImageBase64 || !user || !companyId) return;
     setLoading(true);
     setError("");
     try {
       const token = await user.getIdToken();
-      const response = await fetch("/api/receipt/analyze", {
+      const response = await fetch("/api/ai/workflow", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ imageBase64, companyId }),
+        body: JSON.stringify({
+          imageBase64: targetImageBase64,
+          companyId,
+          source: "receipt",
+        }),
       });
 
       if (response.status === 429) { setError("本日の解析上限に達しました"); return; }
       if (response.status === 422) { setError("もう一度撮影してください"); return; }
       if (!response.ok) { setError("解析に失敗しました。再度お試しください"); return; }
 
-      const result = (await response.json()) as ReceiptAnalysisResult;
+      const result = (await response.json()) as AiWorkflowResult;
+      setAiResult(result);
+      setRevisionMode(false);
       setMatchedItems(matchDetectedItems(result.items, ingredients));
       if (result.items.length === 0) setError("もう一度撮影してください");
     } catch {
@@ -109,6 +121,10 @@ export default function ReceiptPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleAnalyze = async () => {
+    await runAiWorkflow(imageBase64);
   };
 
   // ─ チェックボックス ─
@@ -217,7 +233,24 @@ export default function ReceiptPage() {
           <h1 className="text-xl font-bold">伝票を撮影</h1>
         </div>
 
-        {matchedItems.length === 0 ? (
+        {loading ? (
+          <section className="bg-white rounded-2xl shadow-sm p-6 space-y-4 text-center">
+            <span className="mx-auto block h-8 w-8 rounded-full border-4 border-primary border-t-transparent animate-spin" />
+            <div className="space-y-2">
+              <h2 className="text-lg font-bold text-gray-900">
+                AIがメニューと食材を解析しています
+              </h2>
+              <p className="text-sm text-gray-600">原価と損失を計算中です</p>
+              <p className="text-sm text-gray-500">そのままお待ちください</p>
+            </div>
+          </section>
+        ) : aiResult && !revisionMode ? (
+          <AiWorkflowPanel
+            result={aiResult}
+            onConfirm={() => undefined}
+            onRevise={() => setRevisionMode(true)}
+          />
+        ) : matchedItems.length === 0 ? (
           /* ── 撮影・選択UI ─────────────────────────────── */
           <>
             <section className="bg-white rounded-2xl shadow-sm p-4 space-y-4">

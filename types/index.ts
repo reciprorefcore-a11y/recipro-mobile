@@ -113,6 +113,32 @@ export type ReceiptAnalysisResult = {
   notes?: string;
 };
 
+export type AiMenuCandidate = {
+  name: string;
+  confidence: number;
+  estimatedMonthlySales?: number;
+  ingredients: string[];
+  estimatedCost?: number;
+  estimatedPrice?: number;
+  costRate?: number;
+};
+
+export type AiImprovementCandidate = {
+  title: string;
+  description: string;
+  impact?: number;
+};
+
+export type AiWorkflowResult = ReceiptAnalysisResult & {
+  menuCandidates: AiMenuCandidate[];
+  usageSummary: string;
+  estimatedMonthlyLoss?: number;
+  lossCauses: string[];
+  highCostMenus: string[];
+  priceChangeCandidates: AiImprovementCandidate[];
+  ingredientChangeCandidates: AiImprovementCandidate[];
+};
+
 export type MatchedItem = DetectedItem & {
   matchedIngredient?: Ingredient;
   matchType: "exact" | "normalized" | "partial" | "new";
