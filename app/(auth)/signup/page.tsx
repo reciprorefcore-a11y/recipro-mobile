@@ -25,7 +25,7 @@ export default function SignupPage() {
     try {
       const { user } = await signUp(email, password);
       await createUserProfile(user.uid, { email, companyName, storeName });
-      router.push("/");
+      router.push("/onboarding");
     } catch (err: unknown) {
       const fe = err as { code?: string; message?: string };
       setError(fe.code || fe.message || "登録に失敗しました");

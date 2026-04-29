@@ -11,7 +11,7 @@ const TABS = [
   { href: "/menu", label: "メニュー", icon: "/icons/icon-menu.svg" },
 ] as const;
 
-const HIDDEN_PATHS = ["/login", "/signup"];
+const HIDDEN_PATHS = ["/login", "/signup", "/onboarding"];
 
 const ACTIVE_FILTER =
   "brightness(0) saturate(100%) invert(39%) sepia(92%) saturate(600%) hue-rotate(346deg) brightness(100%)";

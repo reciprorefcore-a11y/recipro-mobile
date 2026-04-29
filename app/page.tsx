@@ -3,7 +3,12 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
-import { getUserProfile, getProducts } from "@/lib/firestore";
+import {
+  getUserProfile,
+  getProducts,
+  getOnboardingSettings,
+  initOnboarding,
+} from "@/lib/firestore";
 import { getGrossProfitLoss, formatGrossProfitLoss } from "@/lib/grossProfitLoss";
 import ReciproLogo from "@/components/ReciproLogo";
 import UnupdatedIngredientsList from "@/components/UnupdatedIngredientsList";
@@ -16,14 +21,37 @@ export default function HomePage() {
   const router = useRouter();
   const [storeName, setStoreName] = useState("");
   const [products, setProducts] = useState<Product[]>([]);
+  const [onboardingSkipped, setOnboardingSkipped] = useState(false);
+  const [ready, setReady] = useState(false);
 
   useEffect(() => {
     if (!user) return;
-    getUserProfile(user.uid).then((profile) => {
+    Promise.all([
+      getUserProfile(user.uid),
+      getProducts(user.uid),
+      getOnboardingSettings(user.uid),
+    ]).then(([profile, prods, onboarding]) => {
+      // オンボーディング判定
+      if (!onboarding) {
+        if (prods.length === 0) {
+          // 新規ユーザー: オンボーディング開始
+          initOnboarding(user.uid).catch(console.error);
+          router.replace("/onboarding");
+          return;
+        }
+        // 既存ユーザー: そのままホーム
+      } else if (!onboarding.onboardingCompleted && !onboarding.onboardingSkipped) {
+        // 途中で終了していたケース
+        router.replace("/onboarding");
+        return;
+      }
+
       if (profile) setStoreName(profile.storeName);
+      setProducts(prods);
+      setOnboardingSkipped(onboarding?.onboardingSkipped ?? false);
+      setReady(true);
     });
-    getProducts(user.uid).then(setProducts);
-  }, [user]);
+  }, [user, router]);
 
   const totalLoss = products.reduce((sum, product) => {
     const { loss } = getGrossProfitLoss(product);
@@ -34,6 +62,14 @@ export default function HomePage() {
 
   const colorHex =
     color === "danger" ? "#D93025" : color === "success" ? "#0F9D58" : "#555555";
+
+  if (!ready) {
+    return (
+      <div className="min-h-screen flex items-center justify-center text-sm text-gray-500">
+        読み込み中...
+      </div>
+    );
+  }
 
   return (
     <main className="min-h-screen bg-gray-50 flex justify-center">
@@ -52,6 +88,21 @@ export default function HomePage() {
             </div>
           </div>
         </div>
+
+        {/* スキップ済みの場合: 設定完了を促すバナー */}
+        {onboardingSkipped && (
+          <button
+            type="button"
+            onClick={() => router.push("/onboarding")}
+            className="w-full flex items-center justify-between rounded-xl bg-orange-50 border border-orange-200 px-4 py-3"
+          >
+            <div className="text-left">
+              <p className="text-sm font-bold text-primary">初期設定が未完了です</p>
+              <p className="text-xs text-gray-500 mt-0.5">食材・メニューを設定して損失を可視化しましょう</p>
+            </div>
+            <span className="text-primary font-bold text-lg">›</span>
+          </button>
+        )}
 
         {/* 粗利損失サマリーカード */}
         <button

@@ -1,5 +1,20 @@
 import type { Timestamp } from "firebase/firestore";
 
+export type CostSource = "estimated" | "recipro" | "user_confirmed";
+
+export type OnboardingSettings = {
+  onboardingStartedAt: Timestamp;
+  onboardingCompletedAt?: Timestamp;
+  onboardingSkippedAt?: Timestamp;
+  onboardingCompleted: boolean;
+  onboardingSkipped: boolean;
+  completedSteps: {
+    ingredientMaster: boolean;
+    menuImport: boolean;
+    confirmation: boolean;
+  };
+};
+
 export type QuantityValue = string | number;
 
 export type Product = {
@@ -22,6 +37,9 @@ export type Product = {
   ingredients?: string[];
   ingredientUsages?: ProductIngredientUsage[];
   posSourceId?: string; // 将来用: スマレジ等のPOS商品ID
+  costSource?: CostSource;
+  isEstimated?: boolean;
+  source?: "ai" | "user_confirmed" | "manual";
   updatedAt: Timestamp;
   createdAt: Timestamp;
 };

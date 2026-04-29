@@ -15,7 +15,7 @@ import {
   Timestamp,
 } from "firebase/firestore";
 import { db } from "./firebase";
-import type { Ingredient, IngredientWrite, PriceHistory, Product, UserProfile } from "@/types";
+import type { Ingredient, IngredientWrite, OnboardingSettings, PriceHistory, Product, UserProfile } from "@/types";
 
 // ─── User ────────────────────────────────────────────────
 
@@ -344,4 +344,67 @@ export async function getRecentPriceHistory(
   );
   const snap = await getDocs(q);
   return snap.docs.map((d) => ({ id: d.id, ...d.data() } as PriceHistory));
+}
+
+// ─── Onboarding ───────────────────────────────────────────
+
+function onboardingRef(companyId: string) {
+  return doc(db, "companies", companyId, "settings", "onboarding");
+}
+
+export async function getOnboardingSettings(
+  companyId: string
+): Promise<OnboardingSettings | null> {
+  const snap = await getDoc(onboardingRef(companyId));
+  return snap.exists() ? (snap.data() as OnboardingSettings) : null;
+}
+
+export async function initOnboarding(companyId: string): Promise<void> {
+  await setDoc(onboardingRef(companyId), {
+    onboardingStartedAt: serverTimestamp(),
+    onboardingCompleted: false,
+    onboardingSkipped: false,
+    completedSteps: {
+      ingredientMaster: false,
+      menuImport: false,
+      confirmation: false,
+    },
+  });
+}
+
+export async function completeOnboardingStep(
+  companyId: string,
+  step: keyof OnboardingSettings["completedSteps"]
+): Promise<void> {
+  await updateDoc(onboardingRef(companyId), {
+    [`completedSteps.${step}`]: true,
+  });
+}
+
+export async function completeOnboarding(companyId: string): Promise<void> {
+  await updateDoc(onboardingRef(companyId), {
+    onboardingCompleted: true,
+    onboardingCompletedAt: serverTimestamp(),
+    "completedSteps.ingredientMaster": true,
+    "completedSteps.menuImport": true,
+    "completedSteps.confirmation": true,
+  });
+}
+
+export async function skipOnboarding(companyId: string): Promise<void> {
+  const snap = await getDoc(onboardingRef(companyId));
+  const base = {
+    onboardingSkipped: true,
+    onboardingSkippedAt: serverTimestamp(),
+  };
+  if (snap.exists()) {
+    await updateDoc(onboardingRef(companyId), base);
+  } else {
+    await setDoc(onboardingRef(companyId), {
+      ...base,
+      onboardingStartedAt: serverTimestamp(),
+      onboardingCompleted: false,
+      completedSteps: { ingredientMaster: false, menuImport: false, confirmation: false },
+    });
+  }
 }
