@@ -37,18 +37,10 @@ export default function SearchPage() {
   useEffect(() => {
     if (!companyId) return;
     let ignore = false;
-
     getIngredients(companyId)
-      .then((data) => {
-        if (!ignore) setIngredients(data);
-      })
-      .finally(() => {
-        if (!ignore) setLoading(false);
-      });
-
-    return () => {
-      ignore = true;
-    };
+      .then((data) => { if (!ignore) setIngredients(data); })
+      .finally(() => { if (!ignore) setLoading(false); });
+    return () => { ignore = true; };
   }, [companyId]);
 
   const filtered = ingredients.filter((item) => {
@@ -85,11 +77,13 @@ export default function SearchPage() {
     await fetchIngredients();
   };
 
+  /* データ空(ローディング完了後)のみシードボタンを表示 */
+  const showSeedButton = !loading && ingredients.length === 0;
+
   return (
     <main className="min-h-screen bg-gray-50 flex justify-center">
       <div className="w-full max-w-[480px] px-4 py-6 space-y-4">
 
-        {/* ヘッダー */}
         <div className="flex items-center gap-3">
           <Link
             href="/"
@@ -103,18 +97,22 @@ export default function SearchPage() {
           <h1 className="text-xl font-bold">食材を検索</h1>
         </div>
 
-        {/* 開発用シードボタン */}
-        {process.env.NODE_ENV === "development" && (
+        {/* シードボタン: データ空の場合のみ表示 */}
+        {showSeedButton && (
           <div className="space-y-1">
             <button
               onClick={handleSeed}
               disabled={seeding}
-              className="w-full py-2 text-xs text-gray-500 border border-dashed border-gray-300 rounded-xl hover:bg-gray-50 disabled:opacity-50 transition-colors"
+              className="w-full py-3 text-sm text-gray-600 border border-dashed border-gray-300 rounded-xl hover:bg-gray-50 disabled:opacity-50 transition-colors font-medium"
             >
-              {seeding ? "投入中..." : "🌱 シードデータを投入 (開発用)"}
+              {seeding ? "投入中..." : "🌱 デモデータを投入(初回のみ)"}
             </button>
             {seedMsg && <p className="text-xs text-center text-gray-500">{seedMsg}</p>}
           </div>
+        )}
+        {/* 投入後エラーのみ表示 */}
+        {!showSeedButton && seedMsg.startsWith("❌") && (
+          <p className="text-xs text-center text-red-500">{seedMsg}</p>
         )}
 
         {/* 検索ボックス */}
@@ -144,19 +142,15 @@ export default function SearchPage() {
           ＋ 新しい食材を追加
         </button>
 
-        {/* 件数 */}
         <p className="text-sm text-gray-500 font-medium">
           食材一覧 ({filtered.length}件)
         </p>
 
-        {/* 食材リスト */}
         {loading ? (
           <p className="text-center text-sm text-gray-400 py-8">読み込み中...</p>
-        ) : filtered.length === 0 ? (
+        ) : filtered.length === 0 && searchQuery ? (
           <p className="text-center text-sm text-gray-400 py-8">
-            {searchQuery
-              ? "該当する食材がありません"
-              : "食材がありません。シードデータを投入してください。"}
+            該当する食材がありません
           </p>
         ) : (
           <div className="space-y-3">

@@ -83,14 +83,15 @@ export default function ProductsPage() {
           <h1 className="text-xl font-bold">商品マスタ</h1>
         </div>
 
-        {process.env.NODE_ENV === "development" && (
+        {/* データ空(ローディング完了後)のみ表示 */}
+        {!loading && products.length === 0 && (
           <div className="space-y-1">
             <button
               onClick={handleSeed}
               disabled={seeding}
-              className="w-full py-2 text-xs text-gray-500 border border-dashed border-gray-300 rounded-xl hover:bg-gray-50 disabled:opacity-50 transition-colors"
+              className="w-full py-3 text-sm text-gray-600 border border-dashed border-gray-300 rounded-xl hover:bg-gray-50 disabled:opacity-50 transition-colors font-medium"
             >
-              {seeding ? "投入中..." : "🌱 商品シードデータを投入 (開発用)"}
+              {seeding ? "投入中..." : "🌱 デモデータを投入(初回のみ)"}
             </button>
             {seedMsg && <p className="text-xs text-center text-gray-500">{seedMsg}</p>}
           </div>

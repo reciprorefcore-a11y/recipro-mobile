@@ -82,6 +82,16 @@ export async function seedProducts(companyId: string): Promise<number> {
   return SEED_PRODUCTS.length;
 }
 
+export async function seedAll(
+  companyId: string
+): Promise<{ ingredients: number; products: number }> {
+  const [ingredients, products] = await Promise.all([
+    seedIngredients(companyId),
+    seedProducts(companyId),
+  ]);
+  return { ingredients, products };
+}
+
 export async function seedIngredients(companyId: string): Promise<number> {
   const col = collection(db, "companies", companyId, "ingredients");
   await Promise.all(

@@ -72,9 +72,22 @@ export default function AddIngredientModal({ isOpen, onClose, onAdd }: Props) {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-end justify-center z-50">
-      <div className="w-full max-w-[480px] bg-white rounded-t-2xl p-6 space-y-4 max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between">
+    /* z-index 200: ボトムナビ(100)より上 */
+    <div
+      className="fixed inset-0 bg-black/50 flex items-end justify-center"
+      style={{ zIndex: 200 }}
+      onClick={handleClose}
+    >
+      {/* form でラップし、flex-col で header/scroll/footer を分離 */}
+      <form
+        id="add-ingredient-form"
+        onSubmit={handleSubmit}
+        className="w-full max-w-[480px] bg-white rounded-t-2xl flex flex-col"
+        style={{ maxHeight: "90svh" }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* ── ヘッダー(固定) ───────────────────────── */}
+        <div className="shrink-0 flex items-center justify-between px-6 pt-5 pb-3 border-b border-gray-100">
           <h2 className="text-lg font-bold">新しい食材を追加</h2>
           <button
             type="button"
@@ -86,7 +99,8 @@ export default function AddIngredientModal({ isOpen, onClose, onAdd }: Props) {
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-3">
+        {/* ── スクロール可能なフォーム領域 ─────────── */}
+        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-3">
           <Input
             label="食材名 *"
             type="text"
@@ -135,12 +149,20 @@ export default function AddIngredientModal({ isOpen, onClose, onAdd }: Props) {
           {error && (
             <p className="text-sm text-red-500 bg-red-50 rounded-xl p-3">{error}</p>
           )}
+        </div>
 
+        {/* ── 登録ボタン(sticky footer) ─────────────── */}
+        <div
+          className="shrink-0 px-6 pt-3 bg-white border-t border-gray-100"
+          style={{
+            paddingBottom: "calc(16px + env(safe-area-inset-bottom, 0px))",
+          }}
+        >
           <Button type="submit" disabled={loading} className="w-full">
             {loading ? "登録中..." : "食材を追加"}
           </Button>
-        </form>
-      </div>
+        </div>
+      </form>
     </div>
   );
 }

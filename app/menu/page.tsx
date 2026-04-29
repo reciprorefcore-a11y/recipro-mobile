@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
 import { getUserProfile } from "@/lib/firestore";
 import { signOut } from "@/lib/auth";
+import { seedAll } from "@/lib/seedData";
 import type { UserProfile } from "@/types";
 
 export default function MenuPage() {
@@ -12,6 +13,8 @@ export default function MenuPage() {
   const router = useRouter();
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [signingOut, setSigningOut] = useState(false);
+  const [seeding, setSeeding] = useState(false);
+  const [seedMsg, setSeedMsg] = useState("");
 
   useEffect(() => {
     if (!user) return;
@@ -25,6 +28,21 @@ export default function MenuPage() {
       router.replace("/login");
     } finally {
       setSigningOut(false);
+    }
+  };
+
+  const handleSeedAll = async () => {
+    if (!user) return;
+    setSeeding(true);
+    setSeedMsg("");
+    try {
+      const { ingredients, products } = await seedAll(user.uid);
+      setSeedMsg(`✅ 食材 ${ingredients}件・商品 ${products}件を投入しました`);
+    } catch (err: unknown) {
+      const e = err as { message?: string };
+      setSeedMsg(`❌ ${e.message ?? "投入に失敗しました"}`);
+    } finally {
+      setSeeding(false);
     }
   };
 
@@ -58,6 +76,26 @@ export default function MenuPage() {
           </dl>
         </div>
 
+        {/* デモデータ投入(本番でも常時表示) */}
+        <div className="bg-white rounded-2xl shadow-sm p-4 space-y-2">
+          <p className="text-sm text-sub-text font-medium">デモデータ</p>
+          <p className="text-xs text-muted">
+            食材・商品のサンプルデータを投入します。既存データへの追記になります。
+          </p>
+          <button
+            onClick={handleSeedAll}
+            disabled={seeding}
+            className="w-full py-2.5 text-sm font-medium text-gray-600 border border-dashed border-gray-300 rounded-xl hover:bg-gray-50 disabled:opacity-50 transition-colors"
+          >
+            {seeding ? "投入中..." : "🌱 デモデータを投入(初回のみ)"}
+          </button>
+          {seedMsg && (
+            <p className={`text-xs text-center ${seedMsg.startsWith("❌") ? "text-red-500" : "text-gray-500"}`}>
+              {seedMsg}
+            </p>
+          )}
+        </div>
+
         {/* リンク */}
         <div className="bg-white rounded-2xl shadow-sm divide-y divide-gray-100">
           {[
@@ -80,15 +118,12 @@ export default function MenuPage() {
         <button
           onClick={handleSignOut}
           disabled={signingOut}
-          className="w-full py-3.5 rounded-2xl bg-white shadow-sm text-danger font-semibold text-base
-            hover:bg-red-50 disabled:opacity-50 transition-colors"
+          className="w-full py-3.5 rounded-2xl bg-white shadow-sm text-danger font-semibold text-base hover:bg-red-50 disabled:opacity-50 transition-colors"
         >
           {signingOut ? "ログアウト中..." : "ログアウト"}
         </button>
 
-        <p className="text-center text-xs text-muted pt-2">
-          Recipro v0.1.0
-        </p>
+        <p className="text-center text-xs text-muted pt-2">Recipro v0.1.0</p>
       </div>
     </main>
   );

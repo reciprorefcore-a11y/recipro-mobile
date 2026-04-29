@@ -99,9 +99,18 @@ export default function GrossProfitLossCard({
       </Card>
 
       {modalOpen && (
-        <div className="fixed inset-0 bg-black/50 flex items-end justify-center z-50">
-          <div className="w-full max-w-[480px] bg-white rounded-t-2xl p-6 space-y-4">
-            <div className="flex items-center justify-between">
+        /* z-index 200: ボトムナビ(100)より上 */
+        <div
+          className="fixed inset-0 bg-black/50 flex items-end justify-center"
+          style={{ zIndex: 200 }}
+          onClick={() => setModalOpen(false)}
+        >
+          <form
+            onSubmit={handleSalesSubmit}
+            className="w-full max-w-[480px] bg-white rounded-t-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-6 pt-5 pb-3 border-b border-gray-100">
               <h2 className="text-lg font-bold">月間販売数を変更</h2>
               <button
                 type="button"
@@ -111,7 +120,7 @@ export default function GrossProfitLossCard({
                 ✕
               </button>
             </div>
-            <form onSubmit={handleSalesSubmit} className="space-y-3">
+            <div className="px-6 py-4 space-y-3">
               <Input
                 label="月間販売数 (食)"
                 type="number"
@@ -125,11 +134,18 @@ export default function GrossProfitLossCard({
                   {inputError}
                 </p>
               )}
+            </div>
+            <div
+              className="px-6 pt-2 border-t border-gray-100"
+              style={{
+                paddingBottom: "calc(16px + env(safe-area-inset-bottom, 0px))",
+              }}
+            >
               <Button type="submit" disabled={saving} className="w-full">
                 {saving ? "保存中..." : "保存"}
               </Button>
-            </form>
-          </div>
+            </div>
+          </form>
         </div>
       )}
     </>
