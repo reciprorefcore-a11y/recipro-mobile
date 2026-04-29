@@ -130,21 +130,9 @@ export default function ReceiptPage() {
 
   // ─ 保存 ─
   const handleUpdate = async () => {
-    if (!companyId) return;
-
-    const matchedUpdates = matchedItems
-      .filter((item) => item.selected && item.matchedIngredient)
-      .map((item) => ({
-        ingredient: item.matchedIngredient as Ingredient,
-        newPrice: item.price,
-      }));
-
-    const newItems = matchedItems.filter(
-      (item) => item.selected && item.matchType === "new"
-    );
-
-    if (matchedUpdates.length === 0 && newItems.length === 0) {
-      setError("更新または追加する食材を選択してください");
+    const sanitizedCompanyId = sanitizeText(companyId);
+    if (!sanitizedCompanyId) {
+      setError("保存に失敗しました。会社IDを取得できません。再ログインしてください。");
       return;
     }
 
@@ -152,31 +140,47 @@ export default function ReceiptPage() {
     setError("");
 
     try {
+      const matchedUpdates = matchedItems
+        .filter((item) => item.selected && item.matchedIngredient)
+        .map((item) => ({
+          ingredient: item.matchedIngredient as Ingredient,
+          newPrice: toFiniteNumber(item.price, `${item.name}の価格`),
+        }));
+
+      const newItems = matchedItems
+        .filter((item) => item.selected && item.matchType === "new")
+        .map(sanitizeNewReceiptItem);
+
+      if (matchedUpdates.length === 0 && newItems.length === 0) {
+        setError("更新または追加する食材を選択してください");
+        setSaving(false);
+        return;
+      }
+
       if (matchedUpdates.length > 0) {
-        await updateIngredientPricesFromReceipt(companyId, matchedUpdates);
+        await updateIngredientPricesFromReceipt(sanitizedCompanyId, matchedUpdates);
       }
 
       if (newItems.length > 0) {
+        const uniquePrefix = `${sanitizedCompanyId.slice(0, 8)}_${Date.now()}`;
         await Promise.all(
           newItems.map(async (item, idx) => {
-            const uniqueId = `${companyId.slice(0, 8)}_${Date.now()}_${idx}`;
-            const nameNormalized = item.name.replace(/[\s　]/g, "");
-            const ingredientNameKana = item.ingredientNameKana ?? item.name;
+            const uniqueId = `${uniquePrefix}_${idx}`;
 
-            const ingredientId = await addIngredient(companyId, {
+            const ingredientId = await addIngredient(sanitizedCompanyId, {
               uniqueId,
-              ingredientName: item.name,
-              ingredientNameKana,
-              nameNormalized,
+              ingredientName: item.ingredientName,
+              ingredientNameKana: item.ingredientNameKana,
+              nameNormalized: item.nameNormalized,
               unit: item.unit,
-              currentPrice: item.price,
+              currentPrice: item.currentPrice,
               supplier: item.supplier,
             });
 
-            await addPriceHistory(companyId, {
+            await addPriceHistory(sanitizedCompanyId, {
               ingredientId,
-              ingredientName: item.name,
-              price: item.price,
+              ingredientName: item.ingredientName,
+              price: item.currentPrice,
               quantity: item.quantity,
               source: "receipt_ai_new",
             });
@@ -188,9 +192,11 @@ export default function ReceiptPage() {
       if (matchedUpdates.length > 0) parts.push(`${matchedUpdates.length}件更新`);
       if (newItems.length > 0) parts.push(`${newItems.length}件新規追加`);
       setDoneMessage(parts.join("、") + "しました");
+      setSaving(false);
       window.setTimeout(() => router.push("/search"), 2500);
-    } catch {
-      setError("保存に失敗しました。再度お試しください");
+    } catch (error) {
+      console.error("save failed", error);
+      setError(`保存に失敗しました。再度お試しください。詳細: ${getErrorMessage(error)}`);
       setSaving(false);
     }
   };
@@ -331,6 +337,7 @@ function ResultItem({
   // 編集モードに入ったら現在の値でリセット
   useEffect(() => {
     if (item.isEditing) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setEditName(item.name);
       setEditUnit(item.unit);
       setEditPrice(String(item.price));
@@ -604,6 +611,60 @@ function normalizeName(value: string) {
     .replace(/[ァ-ン]/g, (char) =>
       String.fromCharCode(char.charCodeAt(0) - 0x60)
     );
+}
+
+type SanitizedNewReceiptItem = {
+  ingredientName: string;
+  ingredientNameKana: string;
+  nameNormalized: string;
+  unit: string;
+  currentPrice: number;
+  quantity: number | null;
+  supplier: string;
+};
+
+function sanitizeNewReceiptItem(item: MatchedItem): SanitizedNewReceiptItem {
+  const ingredientName = sanitizeText(item.name);
+  if (!ingredientName) throw new Error("新規追加の食材名が空です");
+
+  const ingredientNameKana = sanitizeText(item.ingredientNameKana) || ingredientName;
+  const nameNormalized = normalizeName(ingredientName);
+  const unit = sanitizeText(item.unit) || "個";
+  const currentPrice = toFiniteNumber(item.price, `${ingredientName}の価格`);
+  const quantity = toNullableFiniteNumber(item.quantity, `${ingredientName}の数量`);
+
+  return {
+    ingredientName,
+    ingredientNameKana,
+    nameNormalized,
+    unit,
+    currentPrice,
+    quantity,
+    supplier: sanitizeText(item.supplier),
+  };
+}
+
+function sanitizeText(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function toFiniteNumber(value: unknown, label: string): number {
+  const num = Number(value);
+  if (!Number.isFinite(num) || num < 0) {
+    throw new Error(`${label}が不正です`);
+  }
+  return num;
+}
+
+function toNullableFiniteNumber(value: unknown, label: string): number | null {
+  if (value === undefined || value === null || value === "") return null;
+  return toFiniteNumber(value, label);
+}
+
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error && error.message) return error.message;
+  if (typeof error === "string") return error;
+  return "原因不明のエラー";
 }
 
 async function compressImage(file: File): Promise<string> {

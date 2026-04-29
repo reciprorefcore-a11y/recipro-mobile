@@ -46,7 +46,7 @@ export type PriceHistory = {
   ingredientId: string;
   ingredientName: string;
   price: number;
-  quantity?: number; // 将来の数量分析用
+  quantity?: number | null; // 将来の数量分析用
   source?: "manual" | "receipt_ai" | "receipt_ai_new";
   recordedAt: Timestamp;
 };
