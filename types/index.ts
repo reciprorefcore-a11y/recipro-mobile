@@ -46,6 +46,7 @@ export type PriceHistory = {
   ingredientId: string;
   ingredientName: string;
   price: number;
+  quantity?: number; // 将来の数量分析用
   source?: "manual" | "receipt_ai" | "receipt_ai_new";
   recordedAt: Timestamp;
 };
@@ -55,7 +56,9 @@ export type DetectedItem = {
   ingredientNameKana?: string; // AIが返却、なければ食材名をそのまま使用
   price: number;
   unit: string;
+  quantity?: number; // 購入数量
   confidence: number;
+  supplier?: string; // 仕入先
 };
 
 export type ReceiptAnalysisResult = {
@@ -68,4 +71,5 @@ export type MatchedItem = DetectedItem & {
   matchType: "exact" | "normalized" | "partial" | "new";
   oldPrice?: number;
   selected: boolean;
+  isEditing: boolean; // 編集モード状態
 };
