@@ -139,8 +139,8 @@ export default function ProductsPage() {
           <div className="space-y-3">
             {filtered.map((product) => {
               const {
+                baseCost,
                 currentCost,
-                changedCost,
                 monthlySales,
                 loss,
                 accuracyLabel,
@@ -165,7 +165,7 @@ export default function ProductsPage() {
                   </div>
                   <div className="flex items-center justify-between mt-1.5">
                     <p className="text-xs text-gray-400">
-                      現在 {currentCost}円 → 変更後 {changedCost}円
+                      基準 {baseCost}円 → 現在 {currentCost}円
                     </p>
                     <p className="text-xs" style={{ color: "#666666" }}>
                       {accuracyLabel}

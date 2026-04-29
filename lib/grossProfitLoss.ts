@@ -2,14 +2,13 @@ import type { Ingredient, Product } from "@/types";
 
 export type AccuracyLabel =
   | "実入力"
-  | "推定(売上ベース)"
   | "未設定"
   | "レジ連動";
 
 export type GrossProfitLossResult = {
   costDiff: number;
+  baseCost: number;
   currentCost: number;
-  changedCost: number;
   monthlySales?: number;
   loss?: number;
   accuracyLabel: AccuracyLabel;
@@ -30,14 +29,6 @@ export const getMonthlySales = (product: Product): number | undefined => {
     product.monthlyOrderCount
   );
   if (explicitSales !== undefined) return explicitSales;
-
-  if (
-    product.monthlyRevenue &&
-    product.monthlyRevenue > 0 &&
-    product.price > 0
-  ) {
-    return Math.floor(product.monthlyRevenue / product.price);
-  }
   return undefined;
 };
 
@@ -55,26 +46,20 @@ export const getAccuracyLabel = (product: Product): AccuracyLabel => {
   ) {
     return "実入力";
   }
-  if (
-    product.monthlyRevenue &&
-    product.monthlyRevenue > 0 &&
-    product.price > 0
-  )
-    return "推定(売上ベース)";
   return "未設定";
 };
 
 export const getGrossProfitLoss = (product: Product): GrossProfitLossResult => {
   const monthlySales = getMonthlySales(product);
-  const currentCost = product.baseCost;
-  const changedCost = product.changedCost ?? product.currentCost;
-  const costDiff = changedCost - currentCost;
+  const baseCost = product.baseCost;
+  const currentCost = product.currentCost;
+  const costDiff = currentCost - baseCost;
   const loss = monthlySales === undefined ? undefined : costDiff * monthlySales;
 
   return {
     costDiff,
+    baseCost,
     currentCost,
-    changedCost,
     monthlySales,
     loss,
     accuracyLabel: getAccuracyLabel(product),

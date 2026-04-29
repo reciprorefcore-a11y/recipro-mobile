@@ -37,7 +37,7 @@ const SEED_PRODUCTS: SeedProduct[] = [
     baseCost: 280,
     currentCost: 320,
     price: 1280,
-    monthlySales: 800,
+    monthlySalesCount: 800,
   },
   {
     name: "カルボナーラ",
@@ -46,6 +46,7 @@ const SEED_PRODUCTS: SeedProduct[] = [
     currentCost: 380,
     price: 1480,
     monthlyRevenue: 444000, // 売上ベース推定 = 300食
+    monthlySalesCount: 300,
   },
   {
     name: "ティラミス",
@@ -61,7 +62,7 @@ const SEED_PRODUCTS: SeedProduct[] = [
     baseCost: 200,
     currentCost: 180, // 原価ダウン
     price: 880,
-    monthlySales: 500,
+    monthlySalesCount: 500,
     // -10円 × 500食 = -5,000円(改善)
   },
 ];

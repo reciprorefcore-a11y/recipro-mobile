@@ -35,12 +35,14 @@ export default function GrossProfitLossCard({
 
   const isLoss = loss !== undefined && loss > 0;
   const isImprovement = loss !== undefined && loss < 0;
-  const title =
-    loss === undefined ? "月間影響額" : isLoss ? "推定粗利損失" : isImprovement ? "粗利改善" : "粗利損失";
 
   const [modalOpen, setModalOpen] = useState(false);
   const [salesInput, setSalesInput] = useState(
-    product.monthlySales ? String(product.monthlySales) : ""
+    product.monthlySalesCount
+      ? String(product.monthlySalesCount)
+      : product.monthlySales
+      ? String(product.monthlySales)
+      : ""
   );
   const [saving, setSaving] = useState(false);
   const [inputError, setInputError] = useState("");
@@ -55,7 +57,9 @@ export default function GrossProfitLossCard({
     setInputError("");
     setSaving(true);
     try {
-      await onMonthlySalesUpdate?.(Math.floor(val));
+      const sales = Math.floor(val);
+      await onMonthlySalesUpdate?.(sales);
+      setSalesInput(String(sales));
       setModalOpen(false);
     } finally {
       setSaving(false);
@@ -64,10 +68,10 @@ export default function GrossProfitLossCard({
 
   return (
     <>
-      <Card className={isLoss ? "border-l-4 border-[#D93025]" : isImprovement ? "border-l-4 border-[#0F9D58]" : ""}>
-        <p className="text-sm text-gray-500 mb-1">{title}</p>
+      <Card className={isLoss ? "border-l-4 border-[#D93025]" : isImprovement ? "border-l-4 border-[#0F9D58]" : "border-l-4 border-gray-300"}>
+        <p className="text-sm font-semibold text-gray-500 mb-1">推定粗利損失</p>
         <p
-          className="text-3xl font-bold leading-tight"
+          className="text-4xl font-bold leading-tight"
           style={{ color: COLOR_MAP[color] }}
         >
           {display}
@@ -78,20 +82,26 @@ export default function GrossProfitLossCard({
           {accuracyLabel}
         </p>
 
-        <div className="flex flex-wrap gap-2 mt-4">
+        <div className="grid grid-cols-1 gap-2 mt-4 sm:grid-cols-3">
           {onMonthlySalesUpdate && (
             <button
               onClick={() => setModalOpen(true)}
-              className="text-sm px-3 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors"
+              className="min-h-11 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-100 transition-colors"
             >
               月間販売数を変更
             </button>
           )}
           <button
             onClick={() => router.push("/search")}
-            className="text-sm px-3 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors"
+            className="min-h-11 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-100 transition-colors"
           >
             食材を見直す
+          </button>
+          <button
+            onClick={() => router.push("/recipes")}
+            className="min-h-11 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-100 transition-colors"
+          >
+            レシピを編集
           </button>
         </div>
       </Card>
