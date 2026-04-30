@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import { IconDownload, IconAuto } from "@/components/icons";
 
 const PRIMARY = "#E85D2C";
@@ -57,12 +56,6 @@ export default function RecipesPage() {
           </button>
         </section>
 
-        <Link
-          href="/receipt"
-          className="w-full flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white py-3 text-sm font-bold text-gray-600 hover:bg-gray-50 transition-colors"
-        >
-          📷 仕入伝票を追加して食材を増やす
-        </Link>
       </div>
 
       {showToast && (
