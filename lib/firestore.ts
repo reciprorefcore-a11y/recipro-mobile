@@ -15,7 +15,7 @@ import {
   Timestamp,
 } from "firebase/firestore";
 import { db } from "./firebase";
-import type { Ingredient, IngredientWrite, OnboardingSettings, PriceHistory, Product, UserProfile } from "@/types";
+import type { GeneralSettings, Ingredient, IngredientWrite, OnboardingSettings, PriceHistory, PriceMode, Product, UserProfile } from "@/types";
 
 // ─── User ────────────────────────────────────────────────
 
@@ -388,6 +388,7 @@ export async function completeOnboarding(companyId: string): Promise<void> {
     "completedSteps.ingredientMaster": true,
     "completedSteps.menuImport": true,
     "completedSteps.confirmation": true,
+    "completedSteps.costEstimation": true,
   });
 }
 
@@ -406,5 +407,31 @@ export async function skipOnboarding(companyId: string): Promise<void> {
       onboardingCompleted: false,
       completedSteps: { ingredientMaster: false, menuImport: false, confirmation: false },
     });
+  }
+}
+
+// ─── General Settings ─────────────────────────────────────
+
+function generalSettingsRef(companyId: string) {
+  return doc(db, "companies", companyId, "settings", "general");
+}
+
+export async function getGeneralSettings(
+  companyId: string
+): Promise<GeneralSettings | null> {
+  const snap = await getDoc(generalSettingsRef(companyId));
+  return snap.exists() ? (snap.data() as GeneralSettings) : null;
+}
+
+export async function savePriceMode(
+  companyId: string,
+  priceMode: PriceMode
+): Promise<void> {
+  const snap = await getDoc(generalSettingsRef(companyId));
+  const data = { priceMode, priceModeSetAt: serverTimestamp() };
+  if (snap.exists()) {
+    await updateDoc(generalSettingsRef(companyId), data);
+  } else {
+    await setDoc(generalSettingsRef(companyId), data);
   }
 }

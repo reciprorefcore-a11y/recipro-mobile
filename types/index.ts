@@ -2,6 +2,13 @@ import type { Timestamp } from "firebase/firestore";
 
 export type CostSource = "estimated" | "recipro" | "user_confirmed";
 
+export type PriceMode = "taxIncluded" | "taxExcluded";
+
+export type GeneralSettings = {
+  priceMode?: PriceMode;
+  priceModeSetAt?: Timestamp;
+};
+
 export type OnboardingSettings = {
   onboardingStartedAt: Timestamp;
   onboardingCompletedAt?: Timestamp;
@@ -12,6 +19,7 @@ export type OnboardingSettings = {
     ingredientMaster: boolean;
     menuImport: boolean;
     confirmation: boolean;
+    costEstimation?: boolean;
   };
 };
 

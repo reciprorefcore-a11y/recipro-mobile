@@ -1,0 +1,153 @@
+"use client";
+
+type Props = {
+  isOpen: boolean;
+  onClose: () => void;
+  completedSteps: {
+    ingredientMaster: boolean;
+    menuImport: boolean;
+    confirmation: boolean;
+    costEstimation?: boolean;
+  };
+  onResumeClick: () => void;
+};
+
+const STEPS = [
+  { key: "ingredientMaster" as const, label: "食材マスター作成" },
+  { key: "menuImport" as const, label: "メニュー作成" },
+  { key: "confirmation" as const, label: "商品リスト確認" },
+  { key: "costEstimation" as const, label: "原価推定" },
+];
+
+const TOTAL = STEPS.length;
+
+export default function SetupModal({ isOpen, onClose, completedSteps, onResumeClick }: Props) {
+  if (!isOpen) return null;
+
+  const completedCount = STEPS.filter(
+    (s) => completedSteps[s.key] ?? false
+  ).length;
+  const remaining = TOTAL - completedCount;
+
+  return (
+    <div
+      style={{
+        position: "fixed",
+        inset: 0,
+        zIndex: 50,
+        display: "flex",
+        alignItems: "flex-end",
+        justifyContent: "center",
+        backgroundColor: "rgba(0,0,0,0.4)",
+      }}
+      onClick={onClose}
+    >
+      <div
+        style={{
+          width: "100%",
+          maxWidth: "480px",
+          backgroundColor: "#fff",
+          borderRadius: "20px 20px 0 0",
+          padding: "24px 20px 32px",
+          display: "flex",
+          flexDirection: "column",
+          gap: "16px",
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div>
+          <h2 style={{ fontSize: "18px", fontWeight: "bold", color: "#333", margin: 0 }}>
+            初期設定（あと{remaining}ステップ）
+          </h2>
+          <p style={{ fontSize: "13px", color: "#666", marginTop: "6px", marginBottom: 0 }}>
+            初期設定を完了すると、損失分析が使えるようになります。
+          </p>
+        </div>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+          {STEPS.map((s) => {
+            const done = completedSteps[s.key] ?? false;
+            return (
+              <div
+                key={s.key}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "10px",
+                  padding: "12px 14px",
+                  borderRadius: "12px",
+                  backgroundColor: done ? "#FFF5F0" : "#F9F9F9",
+                  border: done ? "1px solid #F3E2D8" : "1px solid #eee",
+                }}
+              >
+                <span
+                  style={{
+                    width: "22px",
+                    height: "22px",
+                    borderRadius: "50%",
+                    backgroundColor: done ? "#E85D2C" : "#ddd",
+                    color: "#fff",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    fontSize: "13px",
+                    fontWeight: "bold",
+                    flexShrink: 0,
+                  }}
+                >
+                  {done ? "✓" : ""}
+                </span>
+                <span
+                  style={{
+                    fontSize: "14px",
+                    fontWeight: done ? "bold" : "normal",
+                    color: done ? "#E85D2C" : "#555",
+                  }}
+                >
+                  {s.label}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: "10px", marginTop: "4px" }}>
+          <button
+            type="button"
+            onClick={onResumeClick}
+            style={{
+              width: "100%",
+              minHeight: "52px",
+              backgroundColor: "#E85D2C",
+              color: "#fff",
+              fontWeight: "bold",
+              fontSize: "16px",
+              border: "none",
+              borderRadius: "12px",
+              cursor: "pointer",
+            }}
+          >
+            続きから始める
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            style={{
+              width: "100%",
+              minHeight: "48px",
+              backgroundColor: "#fff",
+              color: "#555",
+              fontWeight: "bold",
+              fontSize: "15px",
+              border: "1.5px solid #ddd",
+              borderRadius: "12px",
+              cursor: "pointer",
+            }}
+          >
+            あとで
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}

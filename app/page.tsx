@@ -14,15 +14,20 @@ import ReciproLogo from "@/components/ReciproLogo";
 import UnupdatedIngredientsList from "@/components/UnupdatedIngredientsList";
 import ImprovementCard from "@/components/ImprovementCard";
 import Card from "@/components/ui/Card";
+import SetupProgressBar from "@/components/SetupProgressBar";
+import SetupModal from "@/components/SetupModal";
 import { IconSearch, IconEditDocumentNew } from "@/components/icons";
-import type { Product } from "@/types";
+import type { OnboardingSettings, Product } from "@/types";
+
+type CompletedSteps = OnboardingSettings["completedSteps"];
 
 export default function HomePage() {
   const { user } = useAuth();
   const router = useRouter();
   const [storeName, setStoreName] = useState("");
   const [products, setProducts] = useState<Product[]>([]);
-  const [onboardingSkipped, setOnboardingSkipped] = useState(false);
+  const [completedSteps, setCompletedSteps] = useState<CompletedSteps | null>(null);
+  const [setupModalOpen, setSetupModalOpen] = useState(false);
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
@@ -32,24 +37,22 @@ export default function HomePage() {
       getProducts(user.uid),
       getOnboardingSettings(user.uid),
     ]).then(([profile, prods, onboarding]) => {
-      // オンボーディング判定
       if (!onboarding) {
         if (prods.length === 0) {
-          // 新規ユーザー: オンボーディング開始
           initOnboarding(user.uid).catch(console.error);
           router.replace("/onboarding");
           return;
         }
-        // 既存ユーザー: そのままホーム
       } else if (!onboarding.onboardingCompleted && !onboarding.onboardingSkipped) {
-        // 途中で終了していたケース
         router.replace("/onboarding");
         return;
       }
 
       if (profile) setStoreName(profile.storeName);
       setProducts(prods);
-      setOnboardingSkipped(onboarding?.onboardingSkipped ?? false);
+      if (onboarding?.completedSteps) {
+        setCompletedSteps(onboarding.completedSteps);
+      }
       setReady(true);
     });
   }, [user, router]);
@@ -90,19 +93,11 @@ export default function HomePage() {
           </div>
         </div>
 
-        {/* スキップ済みの場合: 設定完了を促すバナー */}
-        {onboardingSkipped && (
-          <button
-            type="button"
-            onClick={() => router.push("/onboarding")}
-            className="w-full flex items-center justify-between rounded-xl bg-orange-50 border border-orange-200 px-4 py-3"
-          >
-            <div className="text-left">
-              <p className="text-sm font-bold text-primary">初期設定が未完了です</p>
-              <p className="text-xs text-gray-500 mt-0.5">食材・メニューを設定して損失を可視化しましょう</p>
-            </div>
-            <span className="text-primary font-bold text-lg">›</span>
-          </button>
+        {completedSteps && (
+          <SetupProgressBar
+            completedSteps={completedSteps}
+            onImportClick={() => setSetupModalOpen(true)}
+          />
         )}
 
         {/* 粗利損失サマリーカード */}
@@ -191,6 +186,18 @@ export default function HomePage() {
 
         <ImprovementCard />
       </div>
+
+      {completedSteps && (
+        <SetupModal
+          isOpen={setupModalOpen}
+          onClose={() => setSetupModalOpen(false)}
+          completedSteps={completedSteps}
+          onResumeClick={() => {
+            setSetupModalOpen(false);
+            router.push("/onboarding");
+          }}
+        />
+      )}
     </main>
   );
 }

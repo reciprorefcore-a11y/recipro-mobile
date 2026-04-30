@@ -12,11 +12,15 @@ import {
   completeOnboardingStep,
   completeOnboarding,
   skipOnboarding,
+  getGeneralSettings,
+  savePriceMode,
 } from "@/lib/firestore";
 import { compressImage } from "@/lib/imageUtils";
-import type { AiWorkflowResult } from "@/types";
+import { applyPriceMode } from "@/lib/priceUtils";
+import type { AiWorkflowResult, PriceMode } from "@/types";
 import MultiImageUploadPanel from "@/components/MultiImageUploadPanel";
 import MultiImageAnalyzeProgress from "@/components/MultiImageAnalyzeProgress";
+import PriceModeModal from "@/components/PriceModeModal";
 import { IconDoneAll, IconLinkCamera, IconLink, IconEditDocumentNew } from "@/components/icons";
 
 // ─── Local types ─────────────────────────────────────────
@@ -154,6 +158,11 @@ export default function OnboardingPage() {
   const [s4Done, setS4Done] = useState(false);
   const [s4Count, setS4Count] = useState(0);
 
+  // Price mode
+  const [priceModeModal, setPriceModeModal] = useState(false);
+  const [priceMode, setPriceMode] = useState<PriceMode | null>(null);
+  const priceModeChecked = useRef(false);
+
   const companyId = user?.uid ?? "";
 
   // ── Init ────────────────────────────────────────────────
@@ -169,10 +178,29 @@ export default function OnboardingPage() {
     });
   }, [user, router]);
 
+  useEffect(() => {
+    if (step !== 2 || !user || priceModeChecked.current) return;
+    priceModeChecked.current = true;
+    getGeneralSettings(user.uid).then((s) => {
+      if (!s?.priceMode) {
+        setPriceModeModal(true);
+      } else {
+        setPriceMode(s.priceMode);
+      }
+    });
+  }, [step, user]);
+
   const handleSkip = async () => {
     if (!user) return;
     await skipOnboarding(user.uid).catch(console.error);
     router.replace("/");
+  };
+
+  const handlePriceModeSelect = async (mode: PriceMode) => {
+    if (!user) return;
+    await savePriceMode(user.uid, mode).catch(console.error);
+    setPriceMode(mode);
+    setPriceModeModal(false);
   };
 
   // ── Step 1: 食材マスター（単発カメラ）─────────────────────
@@ -529,7 +557,7 @@ export default function OnboardingPage() {
             nameKana: p.name,
             baseCost: 0,
             currentCost: 0,
-            price: p.price,
+            price: applyPriceMode(p.price, priceMode ?? "taxExcluded"),
             isEstimated: false,
             source: "user_confirmed",
           } as Parameters<typeof addProduct>[1])
@@ -1106,6 +1134,12 @@ export default function OnboardingPage() {
           </section>
         )}
       </div>
+
+      <PriceModeModal
+        isOpen={priceModeModal}
+        onClose={() => setPriceModeModal(false)}
+        onSelect={handlePriceModeSelect}
+      />
     </main>
   );
 }

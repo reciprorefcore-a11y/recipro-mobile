@@ -4,11 +4,12 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/hooks/useAuth";
-import { getUserProfile } from "@/lib/firestore";
+import { getUserProfile, getGeneralSettings, savePriceMode } from "@/lib/firestore";
 import { signOut } from "@/lib/auth";
 import { seedAll } from "@/lib/seedData";
 import { IconEditDocument } from "@/components/icons";
-import type { UserProfile } from "@/types";
+import PriceModeModal from "@/components/PriceModeModal";
+import type { UserProfile, PriceMode } from "@/types";
 
 export default function MenuPage() {
   const { user } = useAuth();
@@ -17,11 +18,21 @@ export default function MenuPage() {
   const [signingOut, setSigningOut] = useState(false);
   const [seeding, setSeeding] = useState(false);
   const [seedMsg, setSeedMsg] = useState("");
+  const [priceMode, setPriceMode] = useState<PriceMode | undefined>(undefined);
+  const [priceModeOpen, setPriceModeOpen] = useState(false);
 
   useEffect(() => {
     if (!user) return;
     getUserProfile(user.uid).then(setProfile);
+    getGeneralSettings(user.uid).then((s) => setPriceMode(s?.priceMode));
   }, [user]);
+
+  const handlePriceModeSelect = async (mode: PriceMode) => {
+    if (!user) return;
+    await savePriceMode(user.uid, mode).catch(console.error);
+    setPriceMode(mode);
+    setPriceModeOpen(false);
+  };
 
   const handleSignOut = async () => {
     setSigningOut(true);
@@ -98,6 +109,28 @@ export default function MenuPage() {
           )}
         </div>
 
+        {/* 価格設定 */}
+        <div className="bg-white rounded-2xl shadow-sm p-4 space-y-2">
+          <p className="text-sm text-sub-text font-medium">価格設定</p>
+          <div className="flex items-center justify-between">
+            <p className="text-sm text-text">
+              現在:{" "}
+              {priceMode === "taxIncluded"
+                ? "税込"
+                : priceMode === "taxExcluded"
+                ? "税別"
+                : "未設定"}
+            </p>
+            <button
+              onClick={() => setPriceModeOpen(true)}
+              className="text-sm font-semibold px-3 py-1.5 rounded-lg border"
+              style={{ color: "#E85D2C", borderColor: "#E85D2C" }}
+            >
+              変更する
+            </button>
+          </div>
+        </div>
+
         {/* リンク */}
         <div className="bg-white rounded-2xl shadow-sm divide-y divide-gray-100">
           <Link
@@ -137,6 +170,12 @@ export default function MenuPage() {
 
         <p className="text-center text-xs text-muted pt-2">Recipro v0.1.0</p>
       </div>
+
+      <PriceModeModal
+        isOpen={priceModeOpen}
+        onClose={() => setPriceModeOpen(false)}
+        onSelect={handlePriceModeSelect}
+      />
     </main>
   );
 }
