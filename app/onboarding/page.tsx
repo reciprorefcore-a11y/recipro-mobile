@@ -17,7 +17,7 @@ import { compressImage } from "@/lib/imageUtils";
 import type { AiWorkflowResult } from "@/types";
 import MultiImageUploadPanel from "@/components/MultiImageUploadPanel";
 import MultiImageAnalyzeProgress from "@/components/MultiImageAnalyzeProgress";
-import { IconDoneAll } from "@/components/icons";
+import { IconDoneAll, IconLinkCamera, IconLink, IconEditDocumentNew } from "@/components/icons";
 
 // ─── Local types ─────────────────────────────────────────
 
@@ -778,13 +778,19 @@ export default function OnboardingPage() {
                   key={m}
                   type="button"
                   onClick={() => { setS2Method(m); setS2Error(""); }}
-                  className="flex-1 py-2.5 text-sm font-bold transition-colors"
+                  className="flex-1 py-2.5 text-sm font-bold transition-colors flex items-center justify-center gap-1.5"
                   style={{
                     backgroundColor: s2Method === m ? PRIMARY : "white",
                     color: s2Method === m ? "white" : "#666",
                   }}
                 >
-                  {m === "photo" ? "📷 写真" : m === "url" ? "🔗 URL" : "✏️ 手入力"}
+                  {m === "photo" ? (
+                    <><IconLinkCamera size={16} />写真</>
+                  ) : m === "url" ? (
+                    <><IconLink size={16} />URL</>
+                  ) : (
+                    <><IconEditDocumentNew size={16} />手入力</>
+                  )}
                 </button>
               ))}
             </div>

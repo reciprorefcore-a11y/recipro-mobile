@@ -112,3 +112,27 @@ export function IconAuto({ className = "", size = 20 }: IconProps) {
     </svg>
   );
 }
+
+export function IconEditDocumentNew({ className = "", size = 20 }: IconProps) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" height={size} viewBox="0 -960 960 960" width={size} fill="currentColor" className={className} aria-hidden="true">
+      <path d="M560-80v-123l221-220q9-9 20-13t22-4q12 0 23 4.5t20 13.5l37 37q9 9 13 20t4 22q0 11-4.5 22.5T902.09-300L683-80H560Zm300-263-37-37 37 37ZM620-140h38l121-122-18-19-19-18-122 121v38ZM220-80q-24 0-42-18t-18-42v-680q0-24 18-42t42-18h340l240 240v116h-60v-76H520v-220H220v680h280v60H220Zm290-400Zm251 199-19-18 37 37-18-19Z" />
+    </svg>
+  );
+}
+
+export function IconLink({ className = "", size = 20 }: IconProps) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" height={size} viewBox="0 -960 960 960" width={size} fill="currentColor" className={className} aria-hidden="true">
+      <path d="M313-120q-81 0-137-56t-56-137q0-38 14.5-73.5T176-449l146-146 42 43-146 145q-19 19-29 43.5T179-313q0 56 39 94.5t95 38.5q26 0 50.5-10t43.5-29l146-145 42 42-146 146q-27 27-62.5 41.5T313-120Zm81-231-43-43 215-214 42 42-214 215Zm244-14-43-42 146-146q18-18 28-41.5t10-49.5q0-56-38.5-95.5T646-779q-26 0-50 9.5T553-741L407-595l-42-42 146-146q27-27 62.5-42t73.5-15q81 0 137 56.5T840-646q0 38-14.5 73.5T784-510L638-365Z" />
+    </svg>
+  );
+}
+
+export function IconLinkCamera({ className = "", size = 20 }: IconProps) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" height={size} viewBox="0 -960 960 960" width={size} fill="currentColor" className={className} aria-hidden="true">
+      <path d="M480-437Zm353-243q0-81-56.03-139T640-877v-43q100 0 170 70t70 170h-47Zm-87 0q0-45-30.5-76T640-787v-46q63.75 0 108.38 45Q793-743 789-680h-43ZM140-120q-24 0-42-18t-18-42v-513q0-23 18-41.5t42-18.5h147l73-87h240v60H388l-73 87H140v513h680v-460h60v460q0 24-18.5 42T820-120H140Zm339.5-147q72.5 0 121.5-49t49-121.5q0-72.5-49-121T479.5-607q-72.5 0-121 48.5t-48.5 121q0 72.5 48.5 121.5t121 49Zm0-60q-47.5 0-78.5-31.5t-31-79q0-47.5 31-78.5t78.5-31q47.5 0 79 31t31.5 78.5q0 47.5-31.5 79t-79 31.5Z" />
+    </svg>
+  );
+}

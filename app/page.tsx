@@ -14,6 +14,7 @@ import ReciproLogo from "@/components/ReciproLogo";
 import UnupdatedIngredientsList from "@/components/UnupdatedIngredientsList";
 import ImprovementCard from "@/components/ImprovementCard";
 import Card from "@/components/ui/Card";
+import { IconSearch, IconEditDocumentNew } from "@/components/icons";
 import type { Product } from "@/types";
 
 export default function HomePage() {
@@ -160,8 +161,7 @@ export default function HomePage() {
               borderRadius: "12px",
             }}
           >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/icons/icon-search.svg" alt="" width={24} height={24} />
+            <IconSearch size={24} className="text-primary" />
             食材を検索して更新
           </button>
 
@@ -185,7 +185,8 @@ export default function HomePage() {
           onClick={() => router.push("/receipt")}
           className="w-full flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white py-3 text-sm font-bold text-gray-600 hover:bg-gray-50 transition-colors cursor-pointer"
         >
-          📷 仕入伝票を追加して食材を増やす
+          <IconEditDocumentNew size={18} className="text-gray-500" />
+          仕入伝票を追加して食材を増やす
         </button>
 
         <ImprovementCard />
