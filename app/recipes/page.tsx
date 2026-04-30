@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { IconDownload, IconAuto } from "@/components/icons";
 
 const PRIMARY = "#E85D2C";
 
@@ -41,7 +42,8 @@ export default function RecipesPage() {
             onClick={handleComingSoon}
             className="w-full rounded-xl border border-gray-200 bg-white py-3 text-sm font-bold text-gray-700 flex items-center justify-center gap-2 hover:bg-gray-50 transition-colors"
           >
-            📦 レシプロから商品リストを取り込む
+            <IconDownload size={18} />
+            レシプロから商品リストを取り込む
           </button>
 
           <button
@@ -50,7 +52,8 @@ export default function RecipesPage() {
             className="w-full rounded-xl py-3 text-sm font-bold text-white flex items-center justify-center gap-2"
             style={{ backgroundColor: PRIMARY }}
           >
-            ✨ AIメニュー生成
+            <IconAuto size={18} />
+            AIメニュー生成
           </button>
         </section>
 

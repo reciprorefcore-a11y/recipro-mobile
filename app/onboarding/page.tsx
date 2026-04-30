@@ -17,6 +17,7 @@ import { compressImage } from "@/lib/imageUtils";
 import type { AiWorkflowResult } from "@/types";
 import MultiImageUploadPanel from "@/components/MultiImageUploadPanel";
 import MultiImageAnalyzeProgress from "@/components/MultiImageAnalyzeProgress";
+import { IconDoneAll } from "@/components/icons";
 
 // ─── Local types ─────────────────────────────────────────
 
@@ -604,7 +605,7 @@ export default function OnboardingPage() {
             {/* 保存完了 */}
             {s1Saved ? (
               <div className="bg-white rounded-2xl shadow-sm p-6 space-y-4 text-center">
-                <div className="text-4xl">✅</div>
+                <IconDoneAll size={64} className="text-green-500 mx-auto" />
                 <div>
                   <h3 className="text-lg font-bold text-gray-900">
                     {s1SavedCount}件の食材マスタができました
@@ -805,8 +806,8 @@ export default function OnboardingPage() {
                     multiRef={file2Multi}
                     onCameraChange={handleS2Photo}
                     onMultiChange={handleS2MultiPhoto}
-                    cameraLabel="📷 メニューを撮影する"
-                    multiLabel="📁 メニュー写真から複数選ぶ"
+                    cameraLabel="メニューを撮影する"
+                    multiLabel="メニュー写真から複数選ぶ"
                   />
                 )
               )}
@@ -1073,7 +1074,7 @@ export default function OnboardingPage() {
               <LoadingCard label="食材マスターと商品リストから原価を推定中です..." />
             ) : (
               <div className="bg-white rounded-2xl shadow-sm p-6 space-y-4 text-center">
-                <div className="text-4xl">🎉</div>
+                <IconDoneAll size={64} className="text-green-500 mx-auto" />
                 <div>
                   <h3 className="text-lg font-bold text-gray-900">初期設定が完了しました！</h3>
                   <p className="mt-1 text-sm text-gray-600">
@@ -1119,7 +1120,7 @@ function S1ManualForm({
 }) {
   return (
     <div className="border-2 border-dashed border-gray-300 rounded-2xl p-4 space-y-3 bg-gray-50">
-      <p className="text-xs font-semibold text-gray-600">✏️ 手入力で追加</p>
+      <p className="text-xs font-semibold text-gray-600">手入力で追加</p>
       <div>
         <label className="block text-xs font-semibold text-gray-600 mb-1">食材名</label>
         <input

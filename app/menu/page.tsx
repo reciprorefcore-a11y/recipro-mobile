@@ -2,10 +2,12 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { useAuth } from "@/hooks/useAuth";
 import { getUserProfile } from "@/lib/firestore";
 import { signOut } from "@/lib/auth";
 import { seedAll } from "@/lib/seedData";
+import { IconEditDocument } from "@/components/icons";
 import type { UserProfile } from "@/types";
 
 export default function MenuPage() {
@@ -98,6 +100,16 @@ export default function MenuPage() {
 
         {/* リンク */}
         <div className="bg-white rounded-2xl shadow-sm divide-y divide-gray-100">
+          <Link
+            href="/products"
+            className="flex items-center justify-between px-4 py-3.5 hover:bg-gray-50 transition-colors"
+          >
+            <span className="flex items-center gap-2 text-sm font-medium text-text">
+              <IconEditDocument size={18} className="text-gray-500" />
+              商品マスタ管理
+            </span>
+            <span className="text-muted text-lg">›</span>
+          </Link>
           {[
             { label: "利用規約", href: "#" },
             { label: "プライバシーポリシー", href: "#" },
