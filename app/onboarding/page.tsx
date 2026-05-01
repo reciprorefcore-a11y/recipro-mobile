@@ -1,11 +1,12 @@
 "use client";
 
 import { ChangeEvent, useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
 import {
   addIngredient,
   addProduct,
+  getProducts,
   updateProduct,
   getOnboardingSettings,
   initOnboarding,
@@ -112,8 +113,12 @@ function mergeProducts(existing: DraftProduct[], incoming: DraftProduct[]): Draf
 export default function OnboardingPage() {
   const { user } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const stepFromUrl = Number(searchParams.get("step"));
 
-  const [step, setStep] = useState<Step>(1);
+  const [step, setStep] = useState<Step>(
+    (stepFromUrl >= 1 && stepFromUrl <= 4 ? stepFromUrl : 1) as Step
+  );
   const initChecked = useRef(false);
 
   // Step 1 — 複数枚対応
@@ -163,6 +168,9 @@ export default function OnboardingPage() {
   const [priceMode, setPriceMode] = useState<PriceMode | null>(null);
   const priceModeChecked = useRef(false);
 
+  // Step 4 direct access guard
+  const s4Started = useRef(false);
+
   const companyId = user?.uid ?? "";
 
   // ── Init ────────────────────────────────────────────────
@@ -170,13 +178,18 @@ export default function OnboardingPage() {
     if (!user || initChecked.current) return;
     initChecked.current = true;
     getOnboardingSettings(user.uid).then((s) => {
+      // ?step=N で直接アクセスされた場合はリダイレクトをスキップ
+      if (stepFromUrl >= 1 && stepFromUrl <= 4) {
+        if (!s) initOnboarding(user.uid).catch(console.error);
+        return;
+      }
       if (s?.onboardingCompleted || s?.onboardingSkipped) {
         router.replace("/");
       } else if (!s) {
         initOnboarding(user.uid).catch(console.error);
       }
     });
-  }, [user, router]);
+  }, [user, router, stepFromUrl]);
 
   useEffect(() => {
     if (step !== 2 || !user || priceModeChecked.current) return;
@@ -574,6 +587,39 @@ export default function OnboardingPage() {
   };
 
   // ── Step 4 ────────────────────────────────────────────────
+
+  // ?step=4 で直接アクセスされた場合: 既存商品を取得して原価推定を実行
+  useEffect(() => {
+    if (step !== 4 || !user || s4Started.current || s4Count > 0) return;
+    s4Started.current = true;
+    runDirectCostEstimation();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step, user, s4Count]);
+
+  const runDirectCostEstimation = async () => {
+    try {
+      const existingProducts = await getProducts(companyId);
+      const toUpdate = existingProducts.filter(
+        (p) => !p.baseCost || p.baseCost === 0
+      );
+      await Promise.all(
+        toUpdate.map((p) => {
+          const estimated = Math.round(p.price * 0.28);
+          return updateProduct(companyId, p.id, {
+            baseCost: estimated,
+            currentCost: estimated,
+            costSource: "estimated",
+          });
+        })
+      );
+      setS4Count(toUpdate.length);
+      await completeOnboarding(companyId);
+    } catch {
+      await completeOnboarding(companyId).catch(console.error);
+    } finally {
+      setS4Done(true);
+    }
+  };
 
   const runCostEstimation = async (productIds: string[], products: DraftProduct[]) => {
     try {

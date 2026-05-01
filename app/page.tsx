@@ -192,10 +192,6 @@ export default function HomePage() {
           isOpen={setupModalOpen}
           onClose={() => setSetupModalOpen(false)}
           completedSteps={completedSteps}
-          onResumeClick={() => {
-            setSetupModalOpen(false);
-            router.push("/onboarding");
-          }}
         />
       )}
     </main>

@@ -1,5 +1,7 @@
 "use client";
 
+import { useRouter } from "next/navigation";
+
 type Props = {
   isOpen: boolean;
   onClose: () => void;
@@ -9,32 +11,38 @@ type Props = {
     confirmation: boolean;
     costEstimation?: boolean;
   };
-  onResumeClick: () => void;
+  onResumeClick?: () => void;
 };
 
 const STEPS = [
-  { key: "ingredientMaster" as const, label: "食材マスター作成" },
-  { key: "menuImport" as const, label: "メニュー作成" },
-  { key: "confirmation" as const, label: "商品リスト確認" },
-  { key: "costEstimation" as const, label: "原価推定" },
+  { key: "ingredientMaster" as const, label: "食材マスター作成", stepNum: 1 },
+  { key: "menuImport" as const, label: "メニュー作成", stepNum: 2 },
+  { key: "confirmation" as const, label: "商品リスト確認", stepNum: 3 },
+  { key: "costEstimation" as const, label: "原価推定", stepNum: 4 },
 ];
 
 const TOTAL = STEPS.length;
 
-export default function SetupModal({ isOpen, onClose, completedSteps, onResumeClick }: Props) {
+export default function SetupModal({ isOpen, onClose, completedSteps }: Props) {
+  const router = useRouter();
+
   if (!isOpen) return null;
 
-  const completedCount = STEPS.filter(
-    (s) => completedSteps[s.key] ?? false
-  ).length;
+  const completedCount = STEPS.filter((s) => completedSteps[s.key] ?? false).length;
   const remaining = TOTAL - completedCount;
+  const firstIncomplete = STEPS.find((s) => !(completedSteps[s.key] ?? false))?.stepNum ?? 1;
+
+  const goToStep = (stepNum: number) => {
+    onClose();
+    router.push(`/onboarding?step=${stepNum}`);
+  };
 
   return (
     <div
       style={{
         position: "fixed",
         inset: 0,
-        zIndex: 50,
+        zIndex: 200,
         display: "flex",
         alignItems: "flex-end",
         justifyContent: "center",
@@ -48,10 +56,13 @@ export default function SetupModal({ isOpen, onClose, completedSteps, onResumeCl
           maxWidth: "480px",
           backgroundColor: "#fff",
           borderRadius: "20px 20px 0 0",
-          padding: "24px 20px 32px",
+          padding: "24px 20px",
+          paddingBottom: "calc(env(safe-area-inset-bottom) + 16px)",
           display: "flex",
           flexDirection: "column",
           gap: "16px",
+          maxHeight: "90vh",
+          overflowY: "auto",
         }}
         onClick={(e) => e.stopPropagation()}
       >
@@ -64,20 +75,26 @@ export default function SetupModal({ isOpen, onClose, completedSteps, onResumeCl
           </p>
         </div>
 
-        <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
           {STEPS.map((s) => {
             const done = completedSteps[s.key] ?? false;
             return (
-              <div
+              <button
+                type="button"
                 key={s.key}
+                onClick={() => goToStep(s.stepNum)}
                 style={{
                   display: "flex",
                   alignItems: "center",
                   gap: "10px",
                   padding: "12px 14px",
                   borderRadius: "12px",
-                  backgroundColor: done ? "#FFF5F0" : "#F9F9F9",
+                  backgroundColor: done ? "#FFF5F0" : "#F7F7F7",
                   border: done ? "1px solid #F3E2D8" : "1px solid #eee",
+                  minHeight: "56px",
+                  width: "100%",
+                  cursor: "pointer",
+                  textAlign: "left",
                 }}
               >
                 <span
@@ -85,7 +102,7 @@ export default function SetupModal({ isOpen, onClose, completedSteps, onResumeCl
                     width: "22px",
                     height: "22px",
                     borderRadius: "50%",
-                    backgroundColor: done ? "#E85D2C" : "#ddd",
+                    backgroundColor: done ? "#0F9D58" : "#ddd",
                     color: "#fff",
                     display: "flex",
                     alignItems: "center",
@@ -101,20 +118,22 @@ export default function SetupModal({ isOpen, onClose, completedSteps, onResumeCl
                   style={{
                     fontSize: "14px",
                     fontWeight: done ? "bold" : "normal",
-                    color: done ? "#E85D2C" : "#555",
+                    color: done ? "#E85D2C" : "#666",
+                    flex: 1,
                   }}
                 >
                   {s.label}
                 </span>
-              </div>
+                <span style={{ color: "#ccc", fontSize: "18px", lineHeight: 1 }}>›</span>
+              </button>
             );
           })}
         </div>
 
-        <div style={{ display: "flex", flexDirection: "column", gap: "10px", marginTop: "4px" }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
           <button
             type="button"
-            onClick={onResumeClick}
+            onClick={() => goToStep(firstIncomplete)}
             style={{
               width: "100%",
               minHeight: "52px",
