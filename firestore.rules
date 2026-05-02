@@ -1,0 +1,20 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ユーザープロフィール: 本人のみ読み書き可
+    match /users/{uid} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+    }
+
+    // 会社データ: uid == companyId のユーザーのみアクセス可
+    match /companies/{companyId}/{document=**} {
+      allow read, write: if request.auth != null && request.auth.uid == companyId;
+    }
+
+    // 上記以外は全拒否
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

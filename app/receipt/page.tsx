@@ -242,7 +242,7 @@ export default function ReceiptPage() {
       window.setTimeout(() => router.push("/search"), 2500);
     } catch (err) {
       console.error("save failed", err);
-      setError(`保存に失敗しました。再度お試しください。詳細: ${getErrorMessage(err)}`);
+      setError("保存に失敗しました。再度お試しください");
       setSaving(false);
     }
   };
@@ -821,8 +821,3 @@ function toNullableFiniteNumber(value: unknown, label: string): number | null {
   return toFiniteNumber(value, label);
 }
 
-function getErrorMessage(error: unknown): string {
-  if (error instanceof Error && error.message) return error.message;
-  if (typeof error === "string") return error;
-  return "原因不明のエラー";
-}

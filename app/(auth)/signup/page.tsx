@@ -27,8 +27,12 @@ export default function SignupPage() {
       await createUserProfile(user.uid, { email, companyName, storeName });
       router.push("/onboarding");
     } catch (err: unknown) {
-      const fe = err as { code?: string; message?: string };
-      setError(fe.code || fe.message || "登録に失敗しました");
+      const fe = err as { code?: string };
+      if (fe.code === "auth/email-already-in-use") {
+        setError("このメールアドレスはすでに登録されています");
+      } else {
+        setError("登録に失敗しました。入力内容を確認してください");
+      }
     } finally {
       setLoading(false);
     }

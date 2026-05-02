@@ -1,4 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { verifyIdToken } from "@/lib/firebaseAdmin";
 
 const SYSTEM_PROMPT = `あなたは飲食店のメニュー解析AIです。
 与えられたウェブページのテキストからメニュー項目（商品名と価格）を抽出してください。
@@ -11,6 +12,10 @@ const SYSTEM_PROMPT = `あなたは飲食店のメニュー解析AIです。
 }
 メニュー項目が見つからない場合は products を空配列にしてください。`;
 
+// Block private/internal network ranges to prevent SSRF
+const PRIVATE_HOST_RE =
+  /^(localhost|127\.\d+\.\d+\.\d+|0\.0\.0\.0|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+|192\.168\.\d+\.\d+|169\.254\.\d+\.\d+|::1|fc00:|fe80:)/i;
+
 type RequestBody = {
   url?: string;
   companyId?: string;
@@ -20,10 +25,6 @@ type ExtractedProduct = {
   name: string;
   price: number;
   confidence: number;
-};
-
-type FirebaseLookupResponse = {
-  users?: { localId?: string }[];
 };
 
 export async function POST(request: Request) {
@@ -53,6 +54,9 @@ export async function POST(request: Request) {
     }
     if (!["http:", "https:"].includes(parsedUrl.protocol)) {
       return Response.json({ error: "Invalid URL protocol" }, { status: 422 });
+    }
+    if (PRIVATE_HOST_RE.test(parsedUrl.hostname)) {
+      return Response.json({ error: "Invalid URL" }, { status: 422 });
     }
 
     // Fetch page content with timeout
@@ -140,20 +144,7 @@ async function verifyFirebaseUser(
   request: Request
 ): Promise<{ ok: true; uid: string } | { ok: false }> {
   const token = request.headers.get("authorization")?.match(/^Bearer (.+)$/)?.[1];
-  const firebaseApiKey = process.env.NEXT_PUBLIC_FIREBASE_API_KEY;
-  if (!token || !firebaseApiKey) return { ok: false };
-
-  const res = await fetch(
-    `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${firebaseApiKey}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ idToken: token }),
-      cache: "no-store",
-    }
-  );
-  if (!res.ok) return { ok: false };
-  const data = (await res.json()) as FirebaseLookupResponse;
-  const uid = data.users?.[0]?.localId;
-  return uid ? { ok: true, uid } : { ok: false };
+  if (!token) return { ok: false };
+  const result = await verifyIdToken(token);
+  return result ? { ok: true, uid: result.uid } : { ok: false };
 }

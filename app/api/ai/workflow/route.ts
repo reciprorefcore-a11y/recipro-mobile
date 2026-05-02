@@ -1,4 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { verifyIdToken } from "@/lib/firebaseAdmin";
 import type { AiWorkflowResult } from "@/types";
 
 const SYSTEM_PROMPT = `あなたは飲食店の原価管理AIです。
@@ -45,14 +46,12 @@ const SYSTEM_PROMPT = `あなたは飲食店の原価管理AIです。
   "notes": "注意点"
 }`;
 
+const MAX_IMAGE_BYTES = 13_000_000; // ~10 MB after base64 decode
+
 type AiWorkflowRequestBody = {
   imageBase64?: string;
   companyId?: string;
   source?: "receipt" | "menu";
-};
-
-type FirebaseLookupResponse = {
-  users?: { localId?: string }[];
 };
 
 export async function POST(request: Request) {
@@ -69,6 +68,10 @@ export async function POST(request: Request) {
 
     if (!companyId) {
       return Response.json({ error: "Invalid request" }, { status: 400 });
+    }
+
+    if (imageBase64 && imageBase64.length > MAX_IMAGE_BYTES) {
+      return Response.json({ error: "Image too large" }, { status: 413 });
     }
 
     if (companyId !== authResult.uid) {
@@ -137,24 +140,9 @@ async function verifyFirebaseUser(
   request: Request
 ): Promise<{ ok: true; uid: string } | { ok: false }> {
   const token = request.headers.get("authorization")?.match(/^Bearer (.+)$/)?.[1];
-  const firebaseApiKey = process.env.NEXT_PUBLIC_FIREBASE_API_KEY;
-
-  if (!token || !firebaseApiKey) return { ok: false };
-
-  const response = await fetch(
-    `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${firebaseApiKey}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ idToken: token }),
-      cache: "no-store",
-    }
-  );
-
-  if (!response.ok) return { ok: false };
-  const data = (await response.json()) as FirebaseLookupResponse;
-  const uid = data.users?.[0]?.localId;
-  return uid ? { ok: true, uid } : { ok: false };
+  if (!token) return { ok: false };
+  const result = await verifyIdToken(token);
+  return result ? { ok: true, uid: result.uid } : { ok: false };
 }
 
 function parseImageData(imageBase64: string): {
