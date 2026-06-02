@@ -101,6 +101,7 @@ export type Ingredient = {
   category?: string;
   updatedAt?: string;
   isActive: boolean;
+  reciproStoreID?: string;
 };
 
 export type IngredientWrite = Omit<
@@ -171,4 +172,55 @@ export type MatchedItem = DetectedItem & {
   oldPrice?: number;
   selected: boolean;
   isEditing: boolean; // 編集モード状態
+};
+
+export type CompanySettings = {
+  general?: GeneralSettings;
+  onboarding?: OnboardingSettings;
+  reciproStoreID?: string;
+  reciproApiKey?: string;
+  reciproUploadEndpoint?: string;
+  reciproEnvironment?: "production" | "staging" | "test";
+};
+
+export type Company = {
+  id: string;
+  name: string;
+  settings?: CompanySettings;
+  reciproStoreID?: string;
+  reciproApiKey?: string;
+  reciproUploadEndpoint?: string;
+  reciproEnvironment?: "production" | "staging" | "test";
+  createdAt?: Timestamp;
+  updatedAt?: Timestamp;
+};
+
+export type RecipeItem = {
+  name: string;
+  myCatalogId?: number;
+  amount: number | null;
+  price: number;
+  unit: string;
+  cost: number;
+  subRecipe: boolean | string;
+};
+
+export type Recipe = {
+  id: string;
+  recipeID?: string;
+  reciproStoreID?: string;
+  regiID?: number | string;
+  name: string;
+  kana: string;
+  category: [string, string, string];
+  cost: number;
+  costRate: number;
+  targetRate: number;
+  price: number;
+  serv: number;
+  allergySeven: string[];
+  allergyTwenty: string[];
+  items: RecipeItem[];
+  createdAt?: Timestamp;
+  updatedAt?: Timestamp;
 };
