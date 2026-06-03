@@ -257,27 +257,23 @@ export default function SearchPage() {
             </p>
           )}
 
-          {/* CSVダウンロードボタン */}
+          {/* CSVアップロードボタン */}
           <button
             type="button"
             onClick={handleCsvDownload}
             disabled={downloading || loading || withId.length === 0}
             className="w-full py-3 rounded-xl text-sm font-bold text-white disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
-            style={{ backgroundColor: withId.length > 0 && !loading ? "#E85D2C" : "#ccc" }}
+            style={{ backgroundColor: withId.length > 0 && !loading && !downloading ? "#E85D2C" : "#9ca3af" }}
           >
             {downloading && (
               <span className="h-4 w-4 rounded-full border-2 border-white border-t-transparent animate-spin" />
             )}
-            {downloading ? "CSV生成中..." : "📥 CSVをダウンロード"}
+            {downloading ? "CSV生成中..." : "📥 CSVをレシプロにアップロード"}
           </button>
 
           {downloadError && (
             <p className="text-xs text-red-500 text-center">{downloadError}</p>
           )}
-
-          <p className="text-xs text-gray-400 text-center">
-            ダウンロードしたCSVをレシプロにアップロードしてください
-          </p>
         </section>
 
         <p className="text-sm text-gray-500 font-medium">
