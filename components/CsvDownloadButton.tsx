@@ -164,7 +164,17 @@ export default function CsvDownloadButton() {
       )}
 
       {phase.name === "downloading" && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 200,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            backgroundColor: "rgba(0,0,0,0.4)",
+          }}
+        >
           <div className="bg-white rounded-2xl px-8 py-6">
             <p className="text-sm text-text">CSV生成中...</p>
           </div>

@@ -597,8 +597,32 @@ export default function ReceiptPage() {
 
       {/* 類似食材確認モーダル */}
       {similarityModal && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40">
-          <div className="w-full max-w-[480px] bg-white rounded-t-2xl p-6 space-y-4 pb-8">
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 200,
+            display: "flex",
+            alignItems: "flex-end",
+            justifyContent: "center",
+            backgroundColor: "rgba(0,0,0,0.4)",
+          }}
+        >
+          <div
+            style={{
+              width: "100%",
+              maxWidth: "480px",
+              backgroundColor: "#fff",
+              borderRadius: "20px 20px 0 0",
+              padding: "24px 20px",
+              paddingBottom: "calc(env(safe-area-inset-bottom) + 16px + 60px)",
+              maxHeight: "90vh",
+              overflowY: "auto",
+              display: "flex",
+              flexDirection: "column",
+              gap: "16px",
+            }}
+          >
             <h2 className="text-base font-bold text-text">食材の確認</h2>
             <p className="text-sm text-gray-700">
               <span className="font-semibold">「{similarityModal.newItemName}」</span>
