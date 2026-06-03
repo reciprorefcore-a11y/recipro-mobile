@@ -5,6 +5,7 @@ import {
   getDocs,
   addDoc,
   updateDoc,
+  deleteDoc,
   collection,
   writeBatch,
   query,
@@ -15,7 +16,7 @@ import {
   Timestamp,
 } from "firebase/firestore";
 import { db } from "./firebase";
-import type { GeneralSettings, Ingredient, IngredientWrite, OnboardingSettings, PriceHistory, PriceMode, Product, UserProfile } from "@/types";
+import type { GeneralSettings, Ingredient, IngredientWrite, OnboardingSettings, PendingIngredient, PriceHistory, PriceMode, Product, UserProfile } from "@/types";
 
 // ─── User ────────────────────────────────────────────────
 
@@ -408,6 +409,73 @@ export async function skipOnboarding(companyId: string): Promise<void> {
       completedSteps: { ingredientMaster: false, menuImport: false, confirmation: false },
     });
   }
+}
+
+// ─── Pending Ingredients ──────────────────────────────────
+
+function pendingIngredientsCol(companyId: string) {
+  return collection(db, "companies", companyId, "pendingIngredients");
+}
+
+export async function addPendingIngredient(
+  companyId: string,
+  data: Pick<PendingIngredient, "ingredientName" | "ingredientNameKana" | "unit" | "currentPrice" | "supplier" | "supplierKana" | "spec">
+): Promise<string> {
+  const ref = await addDoc(pendingIngredientsCol(companyId), {
+    ...data,
+    companyId,
+    detectedAt: serverTimestamp(),
+  });
+  return ref.id;
+}
+
+export async function getPendingIngredients(companyId: string): Promise<PendingIngredient[]> {
+  const q = query(pendingIngredientsCol(companyId), orderBy("detectedAt", "desc"));
+  const snap = await getDocs(q);
+  return snap.docs.map((d) => ({
+    id: d.id,
+    companyId,
+    ingredientName: stringValue(d.data().ingredientName),
+    ingredientNameKana: optionalString(d.data().ingredientNameKana),
+    unit: stringValue(d.data().unit) || "個",
+    currentPrice: numberValue(d.data().currentPrice),
+    supplier: optionalString(d.data().supplier),
+    supplierKana: optionalString(d.data().supplierKana),
+    spec: optionalString(d.data().spec),
+    detectedAt: d.data().detectedAt,
+  } as PendingIngredient));
+}
+
+export async function deletePendingIngredient(companyId: string, pendingId: string): Promise<void> {
+  await deleteDoc(doc(db, "companies", companyId, "pendingIngredients", pendingId));
+}
+
+export async function promotePendingIngredient(
+  companyId: string,
+  pendingId: string,
+  myCatalogId: string
+): Promise<string> {
+  const pendingRef = doc(db, "companies", companyId, "pendingIngredients", pendingId);
+  const pendingSnap = await getDoc(pendingRef);
+  if (!pendingSnap.exists()) throw new Error("Pending ingredient not found");
+
+  const data = pendingSnap.data();
+  const uniqueId = `${companyId.slice(0, 8)}_${Date.now()}`;
+
+  const ingredientId = await addIngredient(companyId, {
+    uniqueId,
+    myCatalogId,
+    ingredientName: stringValue(data.ingredientName),
+    ingredientNameKana: optionalString(data.ingredientNameKana),
+    unit: stringValue(data.unit) || "個",
+    currentPrice: numberValue(data.currentPrice),
+    supplier: optionalString(data.supplier),
+    supplierKana: optionalString(data.supplierKana),
+    spec: optionalString(data.spec),
+  });
+
+  await deleteDoc(pendingRef);
+  return ingredientId;
 }
 
 // ─── General Settings ─────────────────────────────────────

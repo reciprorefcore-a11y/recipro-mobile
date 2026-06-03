@@ -13,8 +13,7 @@ import { useAuth } from "@/hooks/useAuth";
 import {
   getIngredients,
   updateIngredientPricesFromReceipt,
-  addIngredient,
-  addPriceHistory,
+  addPendingIngredient,
 } from "@/lib/firestore";
 import { compressImage } from "@/lib/imageUtils";
 import type {
@@ -46,6 +45,8 @@ export default function ReceiptPage() {
   const [loading, setLoading] = useState(false);
   const [multiProgress, setMultiProgress] = useState<{ current: number; total: number } | null>(null);
   const [saving, setSaving] = useState(false);
+  const [pendingSaving, setPendingSaving] = useState(false);
+  const [pendingAddedCount, setPendingAddedCount] = useState(0);
   const [error, setError] = useState("");
   const [doneMessage, setDoneMessage] = useState("");
   const [manualMode, setManualMode] = useState(false);
@@ -56,15 +57,22 @@ export default function ReceiptPage() {
 
   const companyId = user?.uid ?? "";
 
-  const selectedCount = useMemo(
-    () => matchedItems.filter((i) => i.selected).length,
+  const updateCandidates = useMemo(
+    () => matchedItems.filter((i) => !!i.matchedIngredient?.myCatalogId),
     [matchedItems]
+  );
+  const newCandidates = useMemo(
+    () => matchedItems.filter((i) => !i.matchedIngredient?.myCatalogId),
+    [matchedItems]
+  );
+  const updateSelectedCount = useMemo(
+    () => updateCandidates.filter((i) => i.selected).length,
+    [updateCandidates]
   );
   const newSelectedCount = useMemo(
-    () => matchedItems.filter((i) => i.selected && i.matchType === "new").length,
-    [matchedItems]
+    () => newCandidates.filter((i) => i.selected).length,
+    [newCandidates]
   );
-  const matchedSelectedCount = selectedCount - newSelectedCount;
 
   useEffect(() => {
     if (!companyId) return;
@@ -176,8 +184,8 @@ export default function ReceiptPage() {
     );
   };
 
-  // ─ 保存 ─
-  const handleUpdate = async () => {
+  // ─ 単価更新保存 ─
+  const handleUpdatePrices = async () => {
     const sanitizedCompanyId = sanitizeText(companyId);
     if (!sanitizedCompanyId) {
       setError("保存に失敗しました。会社IDを取得できません。再ログインしてください。");
@@ -188,62 +196,64 @@ export default function ReceiptPage() {
     setError("");
 
     try {
-      const matchedUpdates = matchedItems
+      const matchedUpdates = updateCandidates
         .filter((item) => item.selected && item.matchedIngredient)
         .map((item) => ({
           ingredient: item.matchedIngredient as Ingredient,
           newPrice: toFiniteNumber(item.price, `${item.name}の価格`),
         }));
 
-      const newItems = matchedItems
-        .filter((item) => item.selected && item.matchType === "new")
-        .map(sanitizeNewReceiptItem);
-
-      if (matchedUpdates.length === 0 && newItems.length === 0) {
-        setError("更新または追加する食材を選択してください");
+      if (matchedUpdates.length === 0) {
+        setError("更新する食材を選択してください");
         setSaving(false);
         return;
       }
 
-      if (matchedUpdates.length > 0) {
-        await updateIngredientPricesFromReceipt(sanitizedCompanyId, matchedUpdates);
-      }
-
-      if (newItems.length > 0) {
-        const uniquePrefix = `${sanitizedCompanyId.slice(0, 8)}_${Date.now()}`;
-        await Promise.all(
-          newItems.map(async (item, idx) => {
-            const uniqueId = `${uniquePrefix}_${idx}`;
-            const ingredientId = await addIngredient(sanitizedCompanyId, {
-              uniqueId,
-              ingredientName: item.ingredientName,
-              ingredientNameKana: item.ingredientNameKana,
-              nameNormalized: item.nameNormalized,
-              unit: item.unit,
-              currentPrice: item.currentPrice,
-              supplier: item.supplier,
-            });
-            await addPriceHistory(sanitizedCompanyId, {
-              ingredientId,
-              ingredientName: item.ingredientName,
-              price: item.currentPrice,
-              quantity: item.quantity,
-              source: "receipt_ai_new",
-            });
-          })
-        );
-      }
-
-      const parts: string[] = [];
-      if (matchedUpdates.length > 0) parts.push(`${matchedUpdates.length}件更新`);
-      if (newItems.length > 0) parts.push(`${newItems.length}件新規追加`);
-      setDoneMessage(parts.join("、") + "しました");
+      await updateIngredientPricesFromReceipt(sanitizedCompanyId, matchedUpdates);
+      setDoneMessage(`${matchedUpdates.length}件の単価を更新しました`);
       setSaving(false);
       window.setTimeout(() => router.push("/search"), 2500);
     } catch (err) {
       console.error("save failed", err);
       setError("保存に失敗しました。再度お試しください");
       setSaving(false);
+    }
+  };
+
+  // ─ 新規食材リストへ追加 ─
+  const handleAddToPending = async () => {
+    const sanitizedCompanyId = sanitizeText(companyId);
+    if (!sanitizedCompanyId) return;
+
+    setPendingSaving(true);
+    setError("");
+
+    try {
+      const targets = newCandidates.filter((item) => item.selected);
+      if (targets.length === 0) {
+        setError("追加する食材を選択してください");
+        setPendingSaving(false);
+        return;
+      }
+
+      await Promise.all(
+        targets.map((item) =>
+          addPendingIngredient(sanitizedCompanyId, {
+            ingredientName: sanitizeText(item.name),
+            ingredientNameKana: sanitizeText(item.ingredientNameKana) || sanitizeText(item.name),
+            unit: item.unit,
+            currentPrice: toFiniteNumber(item.price, `${item.name}の価格`),
+            supplier: item.supplier,
+          })
+        )
+      );
+
+      setPendingAddedCount(targets.length);
+    } catch (err) {
+      console.error("pending save failed", err);
+      setError("保存に失敗しました。再度お試しください");
+    } finally {
+      setPendingSaving(false);
     }
   };
 
@@ -398,41 +408,114 @@ export default function ReceiptPage() {
 
             {/* 解析結果リスト */}
             {matchedItems.length > 0 && !doneMessage && (
-              <section className="space-y-3">
-                <div className="bg-white rounded-2xl shadow-sm p-4 space-y-1">
-                  <h2 className="text-lg font-bold text-gray-900">解析結果</h2>
-                  <p className="text-sm text-gray-500">確認・編集してから保存してください</p>
-                  {matchedItems.some((i) => i.matchType === "new") && (
-                    <div className="mt-2 bg-green-50 rounded-xl px-3 py-2 flex items-start gap-2">
-                      <span className="text-green-600 text-sm">✦</span>
-                      <p className="text-xs text-green-700">
-                        <span className="font-bold">新規追加</span>の食材は食材マスタに自動登録されます。単位・価格を確認してください。
+              <section className="space-y-6">
+
+                {/* 単価更新候補 */}
+                {updateCandidates.length > 0 && (
+                  <section className="space-y-3">
+                    <div className="bg-white rounded-2xl shadow-sm p-4 space-y-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-green-600 text-lg">✓</span>
+                        <h2 className="text-base font-bold text-gray-900">
+                          単価更新候補 {updateCandidates.length}件
+                        </h2>
+                      </div>
+                      <p className="text-xs text-gray-500">
+                        マイカタログID確認済みの食材です。チェックを入れて更新してください。
                       </p>
                     </div>
-                  )}
-                </div>
 
-                {matchedItems.map((item, index) => (
-                  <ResultItem
-                    key={index}
-                    item={item}
-                    onToggle={() => toggleSelected(index)}
-                    onUpdate={(updates) => updateItem(index, updates)}
-                  />
-                ))}
+                    {updateCandidates.map((item) => {
+                      const idx = matchedItems.indexOf(item);
+                      return (
+                        <ResultItem
+                          key={idx}
+                          item={item}
+                          onToggle={() => toggleSelected(idx)}
+                          onUpdate={(updates) => updateItem(idx, updates)}
+                        />
+                      );
+                    })}
 
-                <button
-                  type="button"
-                  onClick={handleUpdate}
-                  disabled={saving || selectedCount === 0}
-                  className="w-full rounded-xl py-4 font-bold text-white disabled:opacity-60 flex items-center justify-center gap-2"
-                  style={{ backgroundColor: PRIMARY }}
-                >
-                  {saving && <span className="h-5 w-5 rounded-full border-2 border-white border-t-transparent animate-spin" />}
-                  {saving ? "保存中..."
-                    : selectedCount === 0 ? "項目を選択してください"
-                    : buildButtonLabel(matchedSelectedCount, newSelectedCount)}
-                </button>
+                    <button
+                      type="button"
+                      onClick={handleUpdatePrices}
+                      disabled={saving || updateSelectedCount === 0}
+                      className="w-full rounded-xl py-4 font-bold text-white disabled:opacity-60 flex items-center justify-center gap-2"
+                      style={{ backgroundColor: PRIMARY }}
+                    >
+                      {saving && (
+                        <span className="h-5 w-5 rounded-full border-2 border-white border-t-transparent animate-spin" />
+                      )}
+                      {saving
+                        ? "保存中..."
+                        : updateSelectedCount === 0
+                        ? "更新する食材を選択してください"
+                        : `更新する ${updateSelectedCount}件`}
+                    </button>
+                  </section>
+                )}
+
+                {/* 新規追加候補 */}
+                {newCandidates.length > 0 && (
+                  <section className="space-y-3">
+                    <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 space-y-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-amber-600 text-lg">⚠</span>
+                        <h2 className="text-base font-bold text-amber-900">
+                          新規追加候補 {newCandidates.length}件
+                        </h2>
+                      </div>
+                      <p className="text-xs text-amber-700">
+                        レシプロ本体で登録後、マイカタログIDを入力してください。
+                      </p>
+                    </div>
+
+                    {newCandidates.map((item) => {
+                      const idx = matchedItems.indexOf(item);
+                      return (
+                        <ResultItem
+                          key={idx}
+                          item={item}
+                          onToggle={() => toggleSelected(idx)}
+                          onUpdate={(updates) => updateItem(idx, updates)}
+                        />
+                      );
+                    })}
+
+                    {pendingAddedCount > 0 ? (
+                      <div className="bg-green-50 rounded-xl px-4 py-3 flex items-center justify-between">
+                        <p className="text-sm font-semibold text-green-700">
+                          ✅ {pendingAddedCount}件を新規食材リストに追加しました
+                        </p>
+                        <a
+                          href="/new-ingredients"
+                          className="text-sm font-bold text-green-700 underline"
+                        >
+                          確認 →
+                        </a>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={handleAddToPending}
+                        disabled={pendingSaving || newSelectedCount === 0}
+                        className="w-full rounded-xl py-4 font-bold text-white disabled:opacity-60 flex items-center justify-center gap-2"
+                        style={{ backgroundColor: "#F59E0B" }}
+                      >
+                        {pendingSaving && (
+                          <span className="h-5 w-5 rounded-full border-2 border-white border-t-transparent animate-spin" />
+                        )}
+                        {pendingSaving
+                          ? "保存中..."
+                          : newSelectedCount === 0
+                          ? "追加する食材を選択してください"
+                          : `[未登録] 新規食材リストへ追加 ${newSelectedCount}件`}
+                      </button>
+                    )}
+                  </section>
+                )}
+
               </section>
             )}
           </>
@@ -695,12 +778,6 @@ function mergeMatchedItems(existing: MatchedItem[], incoming: MatchedItem[]): Ma
   return result;
 }
 
-function buildButtonLabel(matched: number, added: number): string {
-  const parts: string[] = [];
-  if (matched > 0) parts.push(`更新 ${matched}件`);
-  if (added > 0) parts.push(`新規追加 ${added}件`);
-  return `${parts.join(" + ")} を保存する`;
-}
 
 function matchDetectedItems(
   detectedItems: DetectedItem[],
@@ -773,37 +850,6 @@ function normalizeName(value: string | undefined) {
     );
 }
 
-type SanitizedNewReceiptItem = {
-  ingredientName: string;
-  ingredientNameKana: string;
-  nameNormalized: string;
-  unit: string;
-  currentPrice: number;
-  quantity: number | null;
-  supplier: string;
-};
-
-function sanitizeNewReceiptItem(item: MatchedItem): SanitizedNewReceiptItem {
-  const ingredientName = sanitizeText(item.name);
-  if (!ingredientName) throw new Error("新規追加の食材名が空です");
-
-  const ingredientNameKana = sanitizeText(item.ingredientNameKana) || ingredientName;
-  const nameNormalized = normalizeName(ingredientName);
-  const unit = sanitizeText(item.unit) || "個";
-  const currentPrice = toFiniteNumber(item.price, `${ingredientName}の価格`);
-  const quantity = toNullableFiniteNumber(item.quantity, `${ingredientName}の数量`);
-
-  return {
-    ingredientName,
-    ingredientNameKana,
-    nameNormalized,
-    unit,
-    currentPrice,
-    quantity,
-    supplier: sanitizeText(item.supplier),
-  };
-}
-
 function sanitizeText(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
 }
@@ -816,8 +862,5 @@ function toFiniteNumber(value: unknown, label: string): number {
   return num;
 }
 
-function toNullableFiniteNumber(value: unknown, label: string): number | null {
-  if (value === undefined || value === null || value === "") return null;
-  return toFiniteNumber(value, label);
-}
+
 

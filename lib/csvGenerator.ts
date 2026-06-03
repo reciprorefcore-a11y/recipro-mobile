@@ -1,4 +1,4 @@
-import type { Ingredient } from "@/types";
+import type { Ingredient, PendingIngredient } from "@/types";
 
 const COLUMNS = [
   "［マイカタログID］",
@@ -51,7 +51,7 @@ function getInputQuantity(item: Ingredient): string {
 
 export function buildCsvRows(ingredients: Ingredient[]): string[][] {
   return ingredients
-    .filter((i) => i.isActive)
+    .filter((i) => i.isActive && i.myCatalogId)
     .map((item) => [
       item.myCatalogId ?? "",
       "",
@@ -85,6 +85,40 @@ export function buildCsvRows(ingredients: Ingredient[]): string[][] {
 export function generateCsvString(ingredients: Ingredient[]): string {
   const header = COLUMNS.join(",");
   const rows = buildCsvRows(ingredients);
+  const lines = rows.map((row) => row.map(escapeCell).join(","));
+  return [header, ...lines].join("\r\n");
+}
+
+export function generateNewIngredientsCsvString(pending: PendingIngredient[]): string {
+  const header = COLUMNS.join(",");
+  const rows = pending.map((item) => [
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+    item.ingredientName ?? "",
+    item.spec ?? "",
+    item.unit ?? "",
+    String(item.currentPrice ?? ""),
+    "",
+    item.supplier ?? "",
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+    item.supplierKana ?? "",
+    item.ingredientNameKana ?? "",
+    "",
+  ]);
   const lines = rows.map((row) => row.map(escapeCell).join(","));
   return [header, ...lines].join("\r\n");
 }

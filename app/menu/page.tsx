@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/hooks/useAuth";
-import { getUserProfile, getGeneralSettings, savePriceMode } from "@/lib/firestore";
+import { getUserProfile, getGeneralSettings, savePriceMode, getPendingIngredients } from "@/lib/firestore";
 import { signOut } from "@/lib/auth";
 import { seedAll } from "@/lib/seedData";
 import { IconEditDocument } from "@/components/icons";
@@ -21,11 +21,13 @@ export default function MenuPage() {
   const [seedMsg, setSeedMsg] = useState("");
   const [priceMode, setPriceMode] = useState<PriceMode | undefined>(undefined);
   const [priceModeOpen, setPriceModeOpen] = useState(false);
+  const [pendingCount, setPendingCount] = useState(0);
 
   useEffect(() => {
     if (!user) return;
     getUserProfile(user.uid).then(setProfile);
     getGeneralSettings(user.uid).then((s) => setPriceMode(s?.priceMode));
+    getPendingIngredients(user.uid).then((items) => setPendingCount(items.length));
   }, [user]);
 
   const handlePriceModeSelect = async (mode: PriceMode) => {
@@ -150,6 +152,20 @@ export default function MenuPage() {
             <span className="flex items-center gap-2 text-sm font-medium text-text">
               <IconEditDocument size={18} className="text-gray-500" />
               商品マスタ管理
+            </span>
+            <span className="text-muted text-lg">›</span>
+          </Link>
+          <Link
+            href="/new-ingredients"
+            className="flex items-center justify-between px-4 py-3.5 hover:bg-gray-50 transition-colors"
+          >
+            <span className="text-sm font-medium text-text">
+              新規食材リスト
+              {pendingCount > 0 && (
+                <span className="ml-2 text-xs font-bold text-white bg-amber-500 px-2 py-0.5 rounded-full">
+                  {pendingCount}件
+                </span>
+              )}
             </span>
             <span className="text-muted text-lg">›</span>
           </Link>

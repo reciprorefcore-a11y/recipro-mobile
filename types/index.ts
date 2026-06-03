@@ -114,6 +114,19 @@ export type IngredientWrite = Omit<
   nameNormalized?: string;
 };
 
+export type PendingIngredient = {
+  id: string;
+  companyId: string;
+  ingredientName: string;
+  ingredientNameKana?: string;
+  unit: string;
+  currentPrice: number;
+  supplier?: string;
+  supplierKana?: string;
+  spec?: string;
+  detectedAt: Timestamp;
+};
+
 export type PriceHistory = {
   id?: string;
   ingredientId: string;
