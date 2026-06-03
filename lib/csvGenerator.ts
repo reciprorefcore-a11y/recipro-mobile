@@ -89,6 +89,52 @@ export function generateCsvString(ingredients: Ingredient[]): string {
   return [header, ...lines].join("\r\n");
 }
 
+export type ReceiptCsvInput = {
+  myCatalogId: string;
+  ingredientName: string;
+  ingredientNameKana?: string;
+  unit: string;
+  currentPrice: number;
+  oldPrice?: number;
+  supplier?: string;
+  supplierKana?: string;
+  spec?: string;
+};
+
+export function generateReceiptCsvString(items: ReceiptCsvInput[]): string {
+  const header = COLUMNS.join(",");
+  const rows = items.map((item) => [
+    item.myCatalogId,
+    "",
+    "",
+    "",
+    "",
+    "",
+    item.ingredientName ?? "",
+    item.spec ?? "",
+    item.unit ?? "",
+    String(item.currentPrice ?? ""),
+    String(item.oldPrice ?? ""),
+    item.supplier ?? "",
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+    item.supplierKana ?? "",
+    item.ingredientNameKana ?? "",
+    "",
+  ]);
+  const lines = rows.map((row) => row.map(escapeCell).join(","));
+  return [header, ...lines].join("\r\n");
+}
+
 export function generateNewIngredientsCsvString(pending: PendingIngredient[]): string {
   const header = COLUMNS.join(",");
   const rows = pending.map((item) => [

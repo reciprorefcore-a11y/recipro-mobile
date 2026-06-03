@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/hooks/useAuth";
 import { getUserProfile, getGeneralSettings, savePriceMode, getPendingIngredients } from "@/lib/firestore";
+import { getCurrentCounter, resetCounter } from "@/lib/myCatalogIdGenerator";
 import { signOut } from "@/lib/auth";
 import { seedAll } from "@/lib/seedData";
 import { IconEditDocument } from "@/components/icons";
@@ -22,13 +23,28 @@ export default function MenuPage() {
   const [priceMode, setPriceMode] = useState<PriceMode | undefined>(undefined);
   const [priceModeOpen, setPriceModeOpen] = useState(false);
   const [pendingCount, setPendingCount] = useState(0);
+  const [catalogCounter, setCatalogCounter] = useState<number | null>(null);
+  const [resetting, setResetting] = useState(false);
 
   useEffect(() => {
     if (!user) return;
     getUserProfile(user.uid).then(setProfile);
     getGeneralSettings(user.uid).then((s) => setPriceMode(s?.priceMode));
     getPendingIngredients(user.uid).then((items) => setPendingCount(items.length));
+    getCurrentCounter(user.uid).then(setCatalogCounter);
   }, [user]);
+
+  const handleResetCounter = async () => {
+    if (!user) return;
+    if (!window.confirm("カウンタを 10000 にリセットしますか？")) return;
+    setResetting(true);
+    try {
+      await resetCounter(user.uid);
+      setCatalogCounter(10000);
+    } finally {
+      setResetting(false);
+    }
+  };
 
   const handlePriceModeSelect = async (mode: PriceMode) => {
     if (!user) return;
@@ -141,6 +157,29 @@ export default function MenuPage() {
             食材マスタをレシプロ入力シート互換のCSVでエクスポートします。
           </p>
           <CsvDownloadButton />
+        </div>
+
+        {/* マイカタログID管理 */}
+        <div className="bg-white rounded-2xl shadow-sm p-4 space-y-3">
+          <p className="text-sm text-sub-text font-medium">マイカタログID管理</p>
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs text-sub-text">次に発行されるID</p>
+              <p className="text-lg font-bold text-text">
+                {catalogCounter !== null ? catalogCounter.toLocaleString() : "—"}
+              </p>
+            </div>
+            <button
+              onClick={handleResetCounter}
+              disabled={resetting}
+              className="text-xs font-medium px-3 py-1.5 rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50 disabled:opacity-50 transition-colors"
+            >
+              {resetting ? "リセット中..." : "10000 にリセット"}
+            </button>
+          </div>
+          <p className="text-xs text-muted">
+            モバイル版が発行するIDは 10000 以上です。レシプロ本体のIDとは重複しません。
+          </p>
         </div>
 
         {/* リンク */}

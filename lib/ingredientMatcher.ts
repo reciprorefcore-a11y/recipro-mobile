@@ -1,5 +1,34 @@
 import type { Ingredient } from "@/types";
 
+function normalizeName(s: string): string {
+  return (s ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[\s　]/g, "")
+    .replace(/[ァ-ン]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0x60));
+}
+
+export function findSimilarIngredient(
+  name: string,
+  ingredients: Ingredient[]
+): Ingredient | null {
+  const normInput = normalizeName(name);
+  if (normInput.length < 2) return null;
+
+  return (
+    ingredients.find((ing) => {
+      const candidates = [ing.ingredientName, ing.ingredientNameKana]
+        .filter(Boolean)
+        .map((v) => normalizeName(v!));
+      return candidates.some(
+        (c) =>
+          c.length >= 2 &&
+          (c.includes(normInput) || normInput.includes(c))
+      );
+    }) ?? null
+  );
+}
+
 export const KNOWN_SUPPLIERS = [
   "高瀬物産",
   "プレコフーズ",

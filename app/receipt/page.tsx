@@ -13,9 +13,13 @@ import { useAuth } from "@/hooks/useAuth";
 import {
   getIngredients,
   updateIngredientPricesFromReceipt,
-  addPendingIngredient,
+  addIngredient,
+  addPriceHistory,
 } from "@/lib/firestore";
 import { compressImage } from "@/lib/imageUtils";
+import { getNextMyCatalogId, isMobileIssuedId } from "@/lib/myCatalogIdGenerator";
+import { findSimilarIngredient } from "@/lib/ingredientMatcher";
+import type { ReceiptCsvInput } from "@/lib/csvGenerator";
 import type {
   AiWorkflowResult,
   DetectedItem,
@@ -30,6 +34,15 @@ const UNITS = [
   "kg", "g", "個", "L", "ml", "本", "袋", "ケース", "パック", "枚", "cc",
 ] as const;
 
+function todayString(): string {
+  const d = new Date();
+  return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function getEffectiveMyCatalogId(item: MatchedItem): string | undefined {
+  return item.matchedIngredient?.myCatalogId ?? item.myCatalogId;
+}
+
 // ─── Page ────────────────────────────────────────────────
 
 export default function ReceiptPage() {
@@ -37,16 +50,17 @@ export default function ReceiptPage() {
   const router = useRouter();
   const cameraRef = useRef<HTMLInputElement>(null);
   const multiFileRef = useRef<HTMLInputElement>(null);
+  const processingRef = useRef(false);
+  const similarityResolverRef = useRef<((accepted: boolean) => void) | null>(null);
 
   const [ingredients, setIngredients] = useState<Ingredient[]>([]);
   const [matchedItems, setMatchedItems] = useState<MatchedItem[]>([]);
   const [analyzedCount, setAnalyzedCount] = useState(0);
   const [failedCount, setFailedCount] = useState(0);
   const [loading, setLoading] = useState(false);
+  const [assigningIds, setAssigningIds] = useState(false);
   const [multiProgress, setMultiProgress] = useState<{ current: number; total: number } | null>(null);
   const [saving, setSaving] = useState(false);
-  const [pendingSaving, setPendingSaving] = useState(false);
-  const [pendingAddedCount, setPendingAddedCount] = useState(0);
   const [error, setError] = useState("");
   const [doneMessage, setDoneMessage] = useState("");
   const [manualMode, setManualMode] = useState(false);
@@ -54,32 +68,78 @@ export default function ReceiptPage() {
   const [manualUnit, setManualUnit] = useState("個");
   const [manualPrice, setManualPrice] = useState("");
   const [manualQuantity, setManualQuantity] = useState("1");
+  const [similarityModal, setSimilarityModal] = useState<{
+    newItemName: string;
+    candidate: Ingredient;
+  } | null>(null);
 
   const companyId = user?.uid ?? "";
 
-  const updateCandidates = useMemo(
-    () => matchedItems.filter((i) => !!i.matchedIngredient?.myCatalogId),
+  const allItemsHaveIds = useMemo(
+    () =>
+      !assigningIds &&
+      matchedItems.length > 0 &&
+      matchedItems.every((i) => !!getEffectiveMyCatalogId(i)),
+    [assigningIds, matchedItems]
+  );
+
+  const selectedCount = useMemo(
+    () => matchedItems.filter((i) => i.selected).length,
     [matchedItems]
-  );
-  const newCandidates = useMemo(
-    () => matchedItems.filter((i) => !i.matchedIngredient?.myCatalogId),
-    [matchedItems]
-  );
-  const updateSelectedCount = useMemo(
-    () => updateCandidates.filter((i) => i.selected).length,
-    [updateCandidates]
-  );
-  const newSelectedCount = useMemo(
-    () => newCandidates.filter((i) => i.selected).length,
-    [newCandidates]
   );
 
   useEffect(() => {
     if (!companyId) return;
     getIngredients(companyId)
-      .then((data) => setIngredients(data))
+      .then(setIngredients)
       .catch(() => setError("食材マスタの読み込みに失敗しました"));
   }, [companyId]);
+
+  // ─ ID発行・類似チェック ─
+  const processNewItems = async (items: MatchedItem[], ingList: Ingredient[]) => {
+    if (processingRef.current) return;
+    processingRef.current = true;
+    setAssigningIds(true);
+
+    const updates = new Map<number, Partial<MatchedItem>>();
+
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      if (item.matchType !== "new" || item.myCatalogId) continue;
+
+      const similar = findSimilarIngredient(item.name, ingList);
+      if (similar) {
+        const accepted = await new Promise<boolean>((resolve) => {
+          setSimilarityModal({ newItemName: item.name, candidate: similar });
+          similarityResolverRef.current = resolve;
+        });
+        setSimilarityModal(null);
+
+        if (accepted) {
+          updates.set(i, {
+            matchedIngredient: similar,
+            matchType: "exact",
+            oldPrice: similar.currentPrice,
+          });
+          continue;
+        }
+      }
+
+      const newId = await getNextMyCatalogId(companyId);
+      updates.set(i, { myCatalogId: newId });
+    }
+
+    if (updates.size > 0) {
+      setMatchedItems((current) =>
+        current.map((item, i) =>
+          updates.has(i) ? { ...item, ...updates.get(i)! } : item
+        )
+      );
+    }
+
+    setAssigningIds(false);
+    processingRef.current = false;
+  };
 
   // ─ 単発カメラ ─
   const handleCameraFile = async (e: ChangeEvent<HTMLInputElement>) => {
@@ -100,8 +160,10 @@ export default function ReceiptPage() {
       if (!res.ok) { setError("解析に失敗しました。再度お試しください"); return; }
       const result = (await res.json()) as AiWorkflowResult;
       if (!result.items.length) { setError("食材を読み取れませんでした。もう一度撮影してください"); return; }
-      setMatchedItems((prev) => mergeMatchedItems(prev, matchDetectedItems(result.items, ingredients)));
+      const merged = mergeMatchedItems(matchedItems, matchDetectedItems(result.items, ingredients));
+      setMatchedItems(merged);
       setAnalyzedCount((prev) => prev + 1);
+      processNewItems(merged, ingredients);
     } catch {
       setError("通信エラーが発生しました");
     } finally {
@@ -117,6 +179,7 @@ export default function ReceiptPage() {
     setError("");
     let success = 0;
     let fail = 0;
+    let merged = matchedItems;
 
     for (let i = 0; i < files.length; i++) {
       setMultiProgress({ current: i + 1, total: files.length });
@@ -136,7 +199,7 @@ export default function ReceiptPage() {
         if (!res.ok) { fail++; continue; }
         const result = (await res.json()) as AiWorkflowResult;
         if (!result.items.length) { fail++; continue; }
-        setMatchedItems((prev) => mergeMatchedItems(prev, matchDetectedItems(result.items, ingredients)));
+        merged = mergeMatchedItems(merged, matchDetectedItems(result.items, ingredients));
         success++;
       } catch {
         fail++;
@@ -144,12 +207,16 @@ export default function ReceiptPage() {
     }
 
     setMultiProgress(null);
+    setMatchedItems(merged);
     setAnalyzedCount((prev) => prev + success);
     setFailedCount((prev) => prev + fail);
     if (fail > 0 && success === 0) {
       setError("すべての伝票の解析に失敗しました");
     } else if (fail > 0) {
       setError(`${fail}枚の解析に失敗しました。成功した分は表示されています`);
+    }
+    if (success > 0) {
+      processNewItems(merged, ingredients);
     }
   };
 
@@ -160,11 +227,13 @@ export default function ReceiptPage() {
     const qty = Number(manualQuantity) || 1;
     if (!name || !Number.isFinite(price) || price < 1) return;
     const item: DetectedItem = { name, price, unit: manualUnit, quantity: qty, confidence: 1.0 };
-    setMatchedItems((prev) => mergeMatchedItems(prev, matchDetectedItems([item], ingredients)));
+    const merged = mergeMatchedItems(matchedItems, matchDetectedItems([item], ingredients));
+    setMatchedItems(merged);
     setManualName("");
     setManualPrice("");
     setManualQuantity("1");
     setManualMode(false);
+    processNewItems(merged, ingredients);
   };
 
   // ─ チェックボックス ─
@@ -184,76 +253,111 @@ export default function ReceiptPage() {
     );
   };
 
-  // ─ 単価更新保存 ─
-  const handleUpdatePrices = async () => {
-    const sanitizedCompanyId = sanitizeText(companyId);
-    if (!sanitizedCompanyId) {
-      setError("保存に失敗しました。会社IDを取得できません。再ログインしてください。");
-      return;
-    }
+  // ─ 類似確認モーダル ─
+  const handleSimilarityAccept = () => {
+    similarityResolverRef.current?.(true);
+    similarityResolverRef.current = null;
+  };
+  const handleSimilarityReject = () => {
+    similarityResolverRef.current?.(false);
+    similarityResolverRef.current = null;
+  };
 
+  // ─ 全確認して送信 ─
+  const handleSubmitAll = async () => {
+    if (!user || !allItemsHaveIds || selectedCount === 0) return;
     setSaving(true);
     setError("");
 
     try {
-      const matchedUpdates = updateCandidates
-        .filter((item) => item.selected && item.matchedIngredient)
-        .map((item) => ({
-          ingredient: item.matchedIngredient as Ingredient,
-          newPrice: toFiniteNumber(item.price, `${item.name}の価格`),
+      const sanitizedId = sanitizeText(companyId);
+      if (!sanitizedId) throw new Error("会社IDが取得できません");
+
+      const selectedItems = matchedItems.filter((i) => i.selected);
+
+      // 単価更新
+      const priceUpdates = selectedItems
+        .filter((i) => i.matchedIngredient?.myCatalogId)
+        .map((i) => ({
+          ingredient: i.matchedIngredient as Ingredient,
+          newPrice: toFiniteNumber(i.price, `${i.name}の価格`),
         }));
 
-      if (matchedUpdates.length === 0) {
-        setError("更新する食材を選択してください");
-        setSaving(false);
-        return;
-      }
-
-      await updateIngredientPricesFromReceipt(sanitizedCompanyId, matchedUpdates);
-      setDoneMessage(`${matchedUpdates.length}件の単価を更新しました`);
-      setSaving(false);
-      window.setTimeout(() => router.push("/search"), 2500);
-    } catch (err) {
-      console.error("save failed", err);
-      setError("保存に失敗しました。再度お試しください");
-      setSaving(false);
-    }
-  };
-
-  // ─ 新規食材リストへ追加 ─
-  const handleAddToPending = async () => {
-    const sanitizedCompanyId = sanitizeText(companyId);
-    if (!sanitizedCompanyId) return;
-
-    setPendingSaving(true);
-    setError("");
-
-    try {
-      const targets = newCandidates.filter((item) => item.selected);
-      if (targets.length === 0) {
-        setError("追加する食材を選択してください");
-        setPendingSaving(false);
-        return;
-      }
-
-      await Promise.all(
-        targets.map((item) =>
-          addPendingIngredient(sanitizedCompanyId, {
-            ingredientName: sanitizeText(item.name),
-            ingredientNameKana: sanitizeText(item.ingredientNameKana) || sanitizeText(item.name),
-            unit: item.unit,
-            currentPrice: toFiniteNumber(item.price, `${item.name}の価格`),
-            supplier: item.supplier,
-          })
-        )
+      // 新規食材追加
+      const newItems = selectedItems.filter(
+        (i) => !i.matchedIngredient && i.myCatalogId
       );
 
-      setPendingAddedCount(targets.length);
+      if (priceUpdates.length > 0) {
+        await updateIngredientPricesFromReceipt(sanitizedId, priceUpdates);
+      }
+
+      if (newItems.length > 0) {
+        const prefix = `${sanitizedId.slice(0, 8)}_${Date.now()}`;
+        await Promise.all(
+          newItems.map(async (item, idx) => {
+            const ingredientId = await addIngredient(sanitizedId, {
+              uniqueId: `${prefix}_${idx}`,
+              myCatalogId: item.myCatalogId!,
+              ingredientName: sanitizeText(item.name),
+              ingredientNameKana: sanitizeText(item.ingredientNameKana) || sanitizeText(item.name),
+              unit: item.unit,
+              currentPrice: toFiniteNumber(item.price, `${item.name}の価格`),
+              supplier: item.supplier,
+            });
+            await addPriceHistory(sanitizedId, {
+              ingredientId,
+              ingredientName: sanitizeText(item.name),
+              price: toFiniteNumber(item.price, `${item.name}の価格`),
+              source: "receipt_ai_new",
+            });
+          })
+        );
+      }
+
+      // CSV生成・ダウンロード
+      const csvItems: ReceiptCsvInput[] = selectedItems
+        .flatMap((item) => {
+          const id = getEffectiveMyCatalogId(item);
+          if (!id) return [];
+          const row: ReceiptCsvInput = {
+            myCatalogId: id,
+            ingredientName: sanitizeText(item.name),
+            ingredientNameKana: item.ingredientNameKana,
+            unit: item.unit,
+            currentPrice: item.price,
+            oldPrice: item.oldPrice,
+            supplier: item.supplier,
+          };
+          return [row];
+        });
+
+      const token = await user.getIdToken();
+      const csvRes = await fetch("/api/csv/receipt", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ items: csvItems }),
+      });
+      if (csvRes.ok) {
+        const blob = await csvRes.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `伝票_${todayString()}.csv`;
+        a.click();
+        URL.revokeObjectURL(url);
+      }
+
+      const parts: string[] = [];
+      if (priceUpdates.length > 0) parts.push(`${priceUpdates.length}件更新`);
+      if (newItems.length > 0) parts.push(`${newItems.length}件新規追加`);
+      setDoneMessage((parts.join("、") || "0件") + "・CSVダウンロード完了");
+      setSaving(false);
+      window.setTimeout(() => router.push("/search"), 3000);
     } catch (err) {
-      console.error("pending save failed", err);
+      console.error("submit failed", err);
       setError("保存に失敗しました。再度お試しください");
-    } finally {
-      setPendingSaving(false);
+      setSaving(false);
     }
   };
 
@@ -273,7 +377,7 @@ export default function ReceiptPage() {
           <h1 className="text-xl font-bold">伝票を撮影</h1>
         </div>
 
-        {/* ── ローディング（単発） ── */}
+        {/* ローディング（単発） */}
         {loading && (
           <section className="bg-white rounded-2xl shadow-sm p-6 space-y-4 text-center">
             <span className="mx-auto block h-8 w-8 rounded-full border-4 border-primary border-t-transparent animate-spin" />
@@ -284,7 +388,7 @@ export default function ReceiptPage() {
           </section>
         )}
 
-        {/* ── 複数枚処理中 ── */}
+        {/* 複数枚処理中 */}
         {!loading && multiProgress && (
           <MultiImageAnalyzeProgress
             current={multiProgress.current}
@@ -293,7 +397,6 @@ export default function ReceiptPage() {
           />
         )}
 
-        {/* ── 通常状態 ── */}
         {!loading && !multiProgress && (
           <>
             {/* アップロードセクション */}
@@ -310,8 +413,6 @@ export default function ReceiptPage() {
                   onManualClick={() => setManualMode((v) => !v)}
                   compact={analyzedCount > 0}
                 />
-
-                {/* 撮影のコツ（初回のみ） */}
                 {analyzedCount === 0 && !manualMode && (
                   <div className="rounded-xl border border-gray-100 p-3 space-y-1">
                     <p className="text-xs font-semibold text-gray-600">撮影のコツ</p>
@@ -374,20 +475,14 @@ export default function ReceiptPage() {
                   />
                 </div>
                 <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setManualMode(false)}
-                    className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600"
-                  >
+                  <button type="button" onClick={() => setManualMode(false)}
+                    className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600">
                     キャンセル
                   </button>
-                  <button
-                    type="button"
-                    onClick={handleManualAdd}
+                  <button type="button" onClick={handleManualAdd}
                     disabled={!manualName.trim() || Number(manualPrice) < 1}
                     className="flex-1 py-2.5 rounded-xl text-sm font-bold text-white disabled:opacity-40"
-                    style={{ backgroundColor: PRIMARY }}
-                  >
+                    style={{ backgroundColor: PRIMARY }}>
                     追加
                   </button>
                 </div>
@@ -406,116 +501,51 @@ export default function ReceiptPage() {
               </div>
             )}
 
+            {/* ID発行中バナー */}
+            {assigningIds && !doneMessage && (
+              <div className="bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 flex items-center gap-2">
+                <span className="h-4 w-4 rounded-full border-2 border-blue-500 border-t-transparent animate-spin shrink-0" />
+                <p className="text-sm text-blue-700 font-medium">新規食材のID発行中...</p>
+              </div>
+            )}
+
             {/* 解析結果リスト */}
             {matchedItems.length > 0 && !doneMessage && (
-              <section className="space-y-6">
+              <section className="space-y-3">
+                <div className="bg-white rounded-2xl shadow-sm p-4">
+                  <h2 className="text-base font-bold text-gray-900">解析結果</h2>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    確認・編集してから「全て確認して送信」を押してください
+                  </p>
+                </div>
 
-                {/* 単価更新候補 */}
-                {updateCandidates.length > 0 && (
-                  <section className="space-y-3">
-                    <div className="bg-white rounded-2xl shadow-sm p-4 space-y-1">
-                      <div className="flex items-center gap-2">
-                        <span className="text-green-600 text-lg">✓</span>
-                        <h2 className="text-base font-bold text-gray-900">
-                          単価更新候補 {updateCandidates.length}件
-                        </h2>
-                      </div>
-                      <p className="text-xs text-gray-500">
-                        マイカタログID確認済みの食材です。チェックを入れて更新してください。
-                      </p>
-                    </div>
+                {matchedItems.map((item, index) => (
+                  <ResultItem
+                    key={index}
+                    item={item}
+                    onToggle={() => toggleSelected(index)}
+                    onUpdate={(updates) => updateItem(index, updates)}
+                  />
+                ))}
 
-                    {updateCandidates.map((item) => {
-                      const idx = matchedItems.indexOf(item);
-                      return (
-                        <ResultItem
-                          key={idx}
-                          item={item}
-                          onToggle={() => toggleSelected(idx)}
-                          onUpdate={(updates) => updateItem(idx, updates)}
-                        />
-                      );
-                    })}
-
-                    <button
-                      type="button"
-                      onClick={handleUpdatePrices}
-                      disabled={saving || updateSelectedCount === 0}
-                      className="w-full rounded-xl py-4 font-bold text-white disabled:opacity-60 flex items-center justify-center gap-2"
-                      style={{ backgroundColor: PRIMARY }}
-                    >
-                      {saving && (
-                        <span className="h-5 w-5 rounded-full border-2 border-white border-t-transparent animate-spin" />
-                      )}
-                      {saving
-                        ? "保存中..."
-                        : updateSelectedCount === 0
-                        ? "更新する食材を選択してください"
-                        : `更新する ${updateSelectedCount}件`}
-                    </button>
-                  </section>
-                )}
-
-                {/* 新規追加候補 */}
-                {newCandidates.length > 0 && (
-                  <section className="space-y-3">
-                    <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 space-y-1">
-                      <div className="flex items-center gap-2">
-                        <span className="text-amber-600 text-lg">⚠</span>
-                        <h2 className="text-base font-bold text-amber-900">
-                          新規追加候補 {newCandidates.length}件
-                        </h2>
-                      </div>
-                      <p className="text-xs text-amber-700">
-                        レシプロ本体で登録後、マイカタログIDを入力してください。
-                      </p>
-                    </div>
-
-                    {newCandidates.map((item) => {
-                      const idx = matchedItems.indexOf(item);
-                      return (
-                        <ResultItem
-                          key={idx}
-                          item={item}
-                          onToggle={() => toggleSelected(idx)}
-                          onUpdate={(updates) => updateItem(idx, updates)}
-                        />
-                      );
-                    })}
-
-                    {pendingAddedCount > 0 ? (
-                      <div className="bg-green-50 rounded-xl px-4 py-3 flex items-center justify-between">
-                        <p className="text-sm font-semibold text-green-700">
-                          ✅ {pendingAddedCount}件を新規食材リストに追加しました
-                        </p>
-                        <a
-                          href="/new-ingredients"
-                          className="text-sm font-bold text-green-700 underline"
-                        >
-                          確認 →
-                        </a>
-                      </div>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={handleAddToPending}
-                        disabled={pendingSaving || newSelectedCount === 0}
-                        className="w-full rounded-xl py-4 font-bold text-white disabled:opacity-60 flex items-center justify-center gap-2"
-                        style={{ backgroundColor: "#F59E0B" }}
-                      >
-                        {pendingSaving && (
-                          <span className="h-5 w-5 rounded-full border-2 border-white border-t-transparent animate-spin" />
-                        )}
-                        {pendingSaving
-                          ? "保存中..."
-                          : newSelectedCount === 0
-                          ? "追加する食材を選択してください"
-                          : `[未登録] 新規食材リストへ追加 ${newSelectedCount}件`}
-                      </button>
-                    )}
-                  </section>
-                )}
-
+                <button
+                  type="button"
+                  onClick={handleSubmitAll}
+                  disabled={saving || !allItemsHaveIds || selectedCount === 0}
+                  className="w-full rounded-xl py-4 font-bold text-white disabled:opacity-60 flex items-center justify-center gap-2"
+                  style={{ backgroundColor: PRIMARY }}
+                >
+                  {saving && (
+                    <span className="h-5 w-5 rounded-full border-2 border-white border-t-transparent animate-spin" />
+                  )}
+                  {saving
+                    ? "保存・CSV生成中..."
+                    : !allItemsHaveIds
+                    ? "ID発行中..."
+                    : selectedCount === 0
+                    ? "食材を選択してください"
+                    : `全て確認して送信 (${selectedCount}件)`}
+                </button>
               </section>
             )}
           </>
@@ -530,6 +560,47 @@ export default function ReceiptPage() {
           </p>
         )}
       </div>
+
+      {/* 類似食材確認モーダル */}
+      {similarityModal && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40">
+          <div className="w-full max-w-[480px] bg-white rounded-t-2xl p-6 space-y-4 pb-8">
+            <h2 className="text-base font-bold text-text">食材の確認</h2>
+            <p className="text-sm text-gray-700">
+              <span className="font-semibold">「{similarityModal.newItemName}」</span>
+              は既存の食材と似ています。
+            </p>
+            <div className="bg-gray-50 rounded-xl p-3 space-y-1">
+              <p className="text-xs text-sub-text">既存の食材</p>
+              <p className="font-semibold text-text">
+                {similarityModal.candidate.ingredientName}
+              </p>
+              <p className="text-xs text-sub-text">
+                ID: {similarityModal.candidate.myCatalogId ?? "—"}
+                {similarityModal.candidate.supplier ? ` ・ ${similarityModal.candidate.supplier}` : ""}
+              </p>
+            </div>
+            <p className="text-sm text-gray-600">
+              「{similarityModal.newItemName}」は「{similarityModal.candidate.ingredientName}」と同じ食材ですか？
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={handleSimilarityReject}
+                className="flex-1 py-3 rounded-xl border border-gray-200 text-sm font-medium text-sub-text hover:bg-gray-50"
+              >
+                違う → 新規ID発行
+              </button>
+              <button
+                onClick={handleSimilarityAccept}
+                className="flex-1 py-3 rounded-xl text-sm font-bold text-white"
+                style={{ backgroundColor: PRIMARY }}
+              >
+                同じ → 既存ID使用
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }
@@ -579,7 +650,6 @@ function ResultItem({
     const price = Number(editPrice);
     if (!Number.isFinite(price) || price < 1) errs.price = "1以上の価格";
     if (Object.keys(errs).length > 0) { setErrors(errs); return; }
-
     onUpdate({
       name: editName.trim(),
       unit: editUnit,
@@ -590,103 +660,63 @@ function ResultItem({
     });
   };
 
-  const isNew = item.matchType === "new";
+  const effectiveId = getEffectiveMyCatalogId(item);
+  const isNew = !item.matchedIngredient || item.matchType === "new";
+  const isMobileId = isMobileIssuedId(effectiveId);
   const hasChange = !isNew && item.oldPrice !== undefined && item.oldPrice !== item.price;
   const total = Math.floor(Number(editPrice || 0) * Number(editQuantity || 1));
 
   if (item.isEditing) {
     return (
       <article className="bg-orange-50 border-2 border-primary rounded-2xl p-4 space-y-3">
-        <div className="flex items-center gap-2">
-          {isNew && (
-            <span className="text-xs font-bold text-white bg-green-500 px-2 py-0.5 rounded-full">
-              新規追加
-            </span>
-          )}
-          <span className="text-xs text-primary font-semibold">編集中</span>
-        </div>
-
+        <span className="text-xs text-primary font-semibold">編集中</span>
         <div>
           <label className="block text-xs font-semibold text-gray-600 mb-1">食材名</label>
-          <input
-            type="text"
-            value={editName}
-            onChange={(e) => setEditName(e.target.value)}
+          <input type="text" value={editName} onChange={(e) => setEditName(e.target.value)}
             className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-[16px] outline-none focus:ring-2 focus:ring-primary bg-white"
-            placeholder="例: 豚バラスライス"
-          />
+            placeholder="例: 豚バラスライス" />
           {errors.name && <p className="text-xs text-red-500 mt-1">{errors.name}</p>}
         </div>
-
         <div>
           <label className="block text-xs font-semibold text-gray-600 mb-1">単位</label>
-          <select
-            value={editUnit}
-            onChange={(e) => setEditUnit(e.target.value)}
-            className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-[16px] outline-none focus:ring-2 focus:ring-primary bg-white"
-          >
+          <select value={editUnit} onChange={(e) => setEditUnit(e.target.value)}
+            className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-[16px] outline-none focus:ring-2 focus:ring-primary bg-white">
             {UNITS.map((u) => <option key={u} value={u}>{u}</option>)}
           </select>
           {errors.unit && <p className="text-xs text-red-500 mt-1">{errors.unit}</p>}
         </div>
-
         <div className="flex gap-3">
           <div className="flex-1">
             <label className="block text-xs font-semibold text-gray-600 mb-1">数量</label>
-            <input
-              type="number"
-              value={editQuantity}
-              onChange={(e) => setEditQuantity(e.target.value)}
-              min="1"
-              className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-[16px] outline-none focus:ring-2 focus:ring-primary bg-white"
-              placeholder="1"
-            />
+            <input type="number" value={editQuantity} onChange={(e) => setEditQuantity(e.target.value)}
+              min="1" className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-[16px] outline-none focus:ring-2 focus:ring-primary bg-white" />
             {errors.quantity && <p className="text-xs text-red-500 mt-1">{errors.quantity}</p>}
           </div>
           <div className="flex-1">
             <label className="block text-xs font-semibold text-gray-600 mb-1">単価 (円)</label>
-            <input
-              type="number"
-              value={editPrice}
-              onChange={(e) => setEditPrice(e.target.value)}
-              min="1"
-              className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-[16px] outline-none focus:ring-2 focus:ring-primary bg-white"
-              placeholder="例: 580"
-            />
+            <input type="number" value={editPrice} onChange={(e) => setEditPrice(e.target.value)}
+              min="1" className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-[16px] outline-none focus:ring-2 focus:ring-primary bg-white" />
             {errors.price && <p className="text-xs text-red-500 mt-1">{errors.price}</p>}
           </div>
         </div>
-
         <div>
           <label className="block text-xs font-semibold text-gray-600 mb-1">仕入先 (任意)</label>
-          <input
-            type="text"
-            value={editSupplier}
-            onChange={(e) => setEditSupplier(e.target.value)}
+          <input type="text" value={editSupplier} onChange={(e) => setEditSupplier(e.target.value)}
             className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-[16px] outline-none focus:ring-2 focus:ring-primary bg-white"
-            placeholder="例: 田中精肉店"
-          />
+            placeholder="例: 田中精肉店" />
         </div>
-
         <p className="text-sm text-gray-500">
-          合計 (参考): <span className="font-bold text-gray-800">{total.toLocaleString()}円</span>
+          合計: <span className="font-bold text-gray-800">{total.toLocaleString()}円</span>
           <span className="text-xs ml-1">({editQuantity || 1} × {Number(editPrice || 0).toLocaleString()}円)</span>
         </p>
-
         <div className="flex gap-2">
-          <button
-            type="button"
-            onClick={() => onUpdate({ isEditing: false })}
-            className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50 transition-colors"
-          >
+          <button type="button" onClick={() => onUpdate({ isEditing: false })}
+            className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50">
             キャンセル
           </button>
-          <button
-            type="button"
-            onClick={handleConfirm}
-            className="flex-1 py-2.5 rounded-xl text-sm font-bold text-white transition-colors"
-            style={{ backgroundColor: PRIMARY }}
-          >
+          <button type="button" onClick={handleConfirm}
+            className="flex-1 py-2.5 rounded-xl text-sm font-bold text-white"
+            style={{ backgroundColor: PRIMARY }}>
             更新
           </button>
         </div>
@@ -694,21 +724,9 @@ function ResultItem({
     );
   }
 
-  const statusClass = isNew
-    ? "text-green-700 bg-green-50"
-    : hasChange
-    ? "text-blue-700 bg-blue-50"
-    : "text-gray-600 bg-gray-100";
-
-  const priceLabel = isNew
-    ? `新規追加 → ${item.price.toLocaleString()}円`
-    : `${item.oldPrice?.toLocaleString() ?? "—"}円 → ${item.price.toLocaleString()}円（${hasChange ? "変更あり" : "変更なし"}）`;
-
   return (
     <article
-      className={`bg-white rounded-2xl shadow-sm p-4 space-y-3 transition-opacity ${
-        !item.selected ? "opacity-50" : ""
-      }`}
+      className={`bg-white rounded-2xl shadow-sm p-4 space-y-2.5 transition-opacity ${!item.selected ? "opacity-50" : ""}`}
     >
       <div className="flex items-start gap-3">
         <input
@@ -720,9 +738,19 @@ function ResultItem({
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 flex-wrap">
             <h3 className="font-bold text-gray-900">{item.name}</h3>
-            {isNew && (
-              <span className="text-xs font-bold text-white bg-green-500 px-2 py-0.5 rounded-full">
-                新規追加
+            {effectiveId ? (
+              isMobileId ? (
+                <span className="text-xs font-bold text-white bg-blue-500 px-2 py-0.5 rounded-full">
+                  新規追加 (ID: {effectiveId})
+                </span>
+              ) : (
+                <span className="text-xs font-bold text-white bg-green-600 px-2 py-0.5 rounded-full">
+                  単価更新
+                </span>
+              )
+            ) : (
+              <span className="text-xs font-medium text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full">
+                ID発行中...
               </span>
             )}
             {item.confidence < 0.8 && (
@@ -732,28 +760,25 @@ function ResultItem({
           <p className="text-xs text-gray-500 mt-1">
             {item.unit}
             {item.quantity && item.quantity > 1 ? ` × ${item.quantity}` : ""}
-            ・信頼度 {Math.round(item.confidence * 100)}%
-            {item.supplier ? `・${item.supplier}` : ""}
+            {item.supplier ? ` ・ ${item.supplier}` : ""}
+            {!isMobileId && effectiveId ? ` ・ ID: ${effectiveId}` : ""}
           </p>
-          {!isNew && item.matchedIngredient && (
-            <p className="text-xs text-gray-400 mt-0.5">
-              マッチ: {item.matchedIngredient.ingredientName}
-            </p>
-          )}
         </div>
-
-        <button
-          type="button"
-          onClick={() => onUpdate({ isEditing: true })}
-          className="shrink-0 text-xs text-gray-500 border border-gray-200 px-2.5 py-1 rounded-lg hover:bg-gray-50 transition-colors"
-        >
+        <button type="button" onClick={() => onUpdate({ isEditing: true })}
+          className="shrink-0 text-xs text-gray-500 border border-gray-200 px-2.5 py-1 rounded-lg hover:bg-gray-50">
           編集
         </button>
       </div>
 
-      <p className={`rounded-xl px-3 py-2 text-sm font-bold ${statusClass}`}>
-        {priceLabel}
-      </p>
+      <div className={`rounded-xl px-3 py-2 text-sm font-bold ${
+        isNew ? "text-blue-700 bg-blue-50"
+        : hasChange ? "text-green-700 bg-green-50"
+        : "text-gray-600 bg-gray-100"
+      }`}>
+        {isNew
+          ? `新規 → ${item.price.toLocaleString()}円`
+          : `${item.oldPrice?.toLocaleString() ?? "—"}円 → ${item.price.toLocaleString()}円（${hasChange ? "変更あり" : "変更なし"}）`}
+      </div>
     </article>
   );
 }
@@ -777,7 +802,6 @@ function mergeMatchedItems(existing: MatchedItem[], incoming: MatchedItem[]): Ma
   }
   return result;
 }
-
 
 function matchDetectedItems(
   detectedItems: DetectedItem[],
@@ -808,9 +832,7 @@ function matchDetectedItems(
     if (normalized) return toMatchedItem(item, normalized, "normalized");
 
     const partial = ingredients.find((ing) => {
-      const candidates = [
-        ing.ingredientName, ing.ingredientNameKana,
-      ].map(normalizeName);
+      const candidates = [ing.ingredientName, ing.ingredientNameKana].map(normalizeName);
       return candidates.some(
         (c) =>
           c.length >= 2 &&
@@ -861,6 +883,3 @@ function toFiniteNumber(value: unknown, label: string): number {
   }
   return num;
 }
-
-
-
