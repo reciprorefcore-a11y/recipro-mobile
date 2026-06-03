@@ -9,6 +9,7 @@ import { signOut } from "@/lib/auth";
 import { seedAll } from "@/lib/seedData";
 import { IconEditDocument } from "@/components/icons";
 import PriceModeModal from "@/components/PriceModeModal";
+import CsvDownloadButton from "@/components/CsvDownloadButton";
 import type { UserProfile, PriceMode } from "@/types";
 
 export default function MenuPage() {
@@ -129,6 +130,15 @@ export default function MenuPage() {
               変更する
             </button>
           </div>
+        </div>
+
+        {/* レシプロ連携 */}
+        <div className="bg-white rounded-2xl shadow-sm p-4 space-y-2">
+          <p className="text-sm text-sub-text font-medium">レシプロ連携</p>
+          <p className="text-xs text-muted">
+            食材マスタをレシプロ入力シート互換のCSVでエクスポートします。
+          </p>
+          <CsvDownloadButton />
         </div>
 
         {/* リンク */}

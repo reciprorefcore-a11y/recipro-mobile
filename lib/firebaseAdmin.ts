@@ -15,6 +15,10 @@ function getApp(): admin.app.App {
   return admin.initializeApp();
 }
 
+export function getAdminDb(): admin.firestore.Firestore {
+  return getApp().firestore();
+}
+
 export async function verifyIdToken(
   token: string
 ): Promise<{ uid: string } | null> {
