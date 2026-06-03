@@ -16,6 +16,7 @@ import {
   addIngredient,
   addPriceHistory,
 } from "@/lib/firestore";
+import { saveIngredientSnapshot } from "@/lib/ingredientSnapshot";
 import { compressImage } from "@/lib/imageUtils";
 import { getNextMyCatalogId, isMobileIssuedId } from "@/lib/myCatalogIdGenerator";
 import { findSimilarIngredient } from "@/lib/ingredientMatcher";
@@ -25,6 +26,7 @@ import type {
   DetectedItem,
   Ingredient,
   MatchedItem,
+  SnapshotItem,
 } from "@/types";
 import MultiImageUploadPanel from "@/components/MultiImageUploadPanel";
 import MultiImageAnalyzeProgress from "@/components/MultiImageAnalyzeProgress";
@@ -288,31 +290,63 @@ export default function ReceiptPage() {
         (i) => !i.matchedIngredient && i.myCatalogId
       );
 
+      // スナップショット用: 単価更新分 (更新前の価格を保持)
+      const snapshotPriceItems: SnapshotItem[] = priceUpdates.map((u) => ({
+        ingredientId: u.ingredient.id,
+        myCatalogId: u.ingredient.myCatalogId,
+        ingredientName: u.ingredient.ingredientName,
+        oldPrice: u.ingredient.currentPrice,
+        newPrice: u.newPrice,
+        supplier: u.ingredient.supplier,
+        isNew: false,
+      }));
+
       if (priceUpdates.length > 0) {
         await updateIngredientPricesFromReceipt(sanitizedId, priceUpdates);
       }
 
+      // 新規食材を保存し、スナップショット用にIDを収集
+      let snapshotNewItems: SnapshotItem[] = [];
       if (newItems.length > 0) {
         const prefix = `${sanitizedId.slice(0, 8)}_${Date.now()}`;
-        await Promise.all(
+        const newResults = await Promise.all(
           newItems.map(async (item, idx) => {
+            const price = toFiniteNumber(item.price, `${item.name}の価格`);
             const ingredientId = await addIngredient(sanitizedId, {
               uniqueId: `${prefix}_${idx}`,
               myCatalogId: item.myCatalogId!,
               ingredientName: sanitizeText(item.name),
               ingredientNameKana: sanitizeText(item.ingredientNameKana) || sanitizeText(item.name),
               unit: item.unit,
-              currentPrice: toFiniteNumber(item.price, `${item.name}の価格`),
+              currentPrice: price,
               supplier: item.supplier,
             });
             await addPriceHistory(sanitizedId, {
               ingredientId,
               ingredientName: sanitizeText(item.name),
-              price: toFiniteNumber(item.price, `${item.name}の価格`),
+              price,
               source: "receipt_ai_new",
             });
+            return { ingredientId, item, price };
           })
         );
+        snapshotNewItems = newResults.map(({ ingredientId, item, price }) => ({
+          ingredientId,
+          myCatalogId: item.myCatalogId!,
+          ingredientName: sanitizeText(item.name),
+          oldPrice: 0,
+          newPrice: price,
+          supplier: item.supplier,
+          isNew: true,
+        }));
+      }
+
+      // スナップショット保存
+      const allSnapshotItems = [...snapshotPriceItems, ...snapshotNewItems];
+      if (allSnapshotItems.length > 0) {
+        const now = new Date();
+        const desc = `${now.getMonth() + 1}/${now.getDate()} ${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")} 伝票AI送信`;
+        await saveIngredientSnapshot(sanitizedId, user.uid, desc, allSnapshotItems);
       }
 
       // CSV生成・ダウンロード

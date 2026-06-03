@@ -132,9 +132,30 @@ export type PriceHistory = {
   ingredientId: string;
   ingredientName: string;
   price: number;
-  quantity?: number | null; // 将来の数量分析用
-  source?: "manual" | "receipt_ai" | "receipt_ai_new";
+  quantity?: number | null;
+  source?: "manual" | "receipt_ai" | "receipt_ai_new" | "rollback";
   recordedAt: Timestamp;
+};
+
+export type SnapshotItem = {
+  ingredientId: string;
+  myCatalogId?: string;
+  ingredientName: string;
+  oldPrice: number;
+  newPrice: number;
+  supplier?: string;
+  isNew: boolean;
+};
+
+export type IngredientSnapshot = {
+  id: string;
+  companyId: string;
+  createdAt: Timestamp;
+  createdBy: string;
+  status: "active" | "rolled_back";
+  description: string;
+  items: SnapshotItem[];
+  rolledBackAt?: Timestamp;
 };
 
 export type DetectedItem = {
