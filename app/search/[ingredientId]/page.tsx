@@ -333,7 +333,7 @@ function MainEditView({
             <span>
               <span className="block text-sm font-medium text-gray-900">有効</span>
               <span className="block text-xs text-gray-500">
-                無効にするとレシプロ反映JSONから除外されます
+                無効にするとCSVエクスポートから除外されます
               </span>
             </span>
             <input
