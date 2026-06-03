@@ -76,11 +76,31 @@ export default function CsvDownloadButton() {
 
       {phase.name === "preview" && (
         <div
-          className="fixed inset-0 z-50 flex items-end justify-center bg-black/40"
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 200,
+            display: "flex",
+            alignItems: "flex-end",
+            justifyContent: "center",
+            backgroundColor: "rgba(0,0,0,0.4)",
+          }}
           onClick={handleClose}
         >
           <div
-            className="w-full max-w-[480px] bg-white rounded-t-2xl p-6 space-y-4 pb-8"
+            style={{
+              width: "100%",
+              maxWidth: "480px",
+              backgroundColor: "#fff",
+              borderRadius: "20px 20px 0 0",
+              padding: "24px 20px",
+              paddingBottom: "calc(env(safe-area-inset-bottom) + 16px + 60px)",
+              maxHeight: "90vh",
+              overflowY: "auto",
+              display: "flex",
+              flexDirection: "column",
+              gap: "16px",
+            }}
             onClick={(e) => e.stopPropagation()}
           >
             <h2 className="text-base font-bold text-text">CSVエクスポート確認</h2>

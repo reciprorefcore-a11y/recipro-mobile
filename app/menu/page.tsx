@@ -4,8 +4,8 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/hooks/useAuth";
-import { getUserProfile, getGeneralSettings, savePriceMode, getPendingIngredients } from "@/lib/firestore";
-import { getCurrentCounter, resetCounter } from "@/lib/myCatalogIdGenerator";
+import { getUserProfile, getGeneralSettings, savePriceMode, getPendingIngredients, getIngredients, updateIngredient } from "@/lib/firestore";
+import { getCurrentCounter, resetCounter, getNextMyCatalogId } from "@/lib/myCatalogIdGenerator";
 import { signOut } from "@/lib/auth";
 import { seedAll } from "@/lib/seedData";
 import { IconEditDocument } from "@/components/icons";
@@ -25,6 +25,11 @@ export default function MenuPage() {
   const [pendingCount, setPendingCount] = useState(0);
   const [catalogCounter, setCatalogCounter] = useState<number | null>(null);
   const [resetting, setResetting] = useState(false);
+  const [bulkAssigning, setBulkAssigning] = useState(false);
+  const [bulkMsg, setBulkMsg] = useState("");
+  const [importing, setImporting] = useState(false);
+  const [importMsg, setImportMsg] = useState("");
+  const [csvFileName, setCsvFileName] = useState<string | null>(null);
 
   useEffect(() => {
     if (!user) return;
@@ -33,6 +38,62 @@ export default function MenuPage() {
     getPendingIngredients(user.uid).then((items) => setPendingCount(items.length));
     getCurrentCounter(user.uid).then(setCatalogCounter);
   }, [user]);
+
+  const handleBulkAssign = async () => {
+    if (!user) return;
+    setBulkMsg("");
+    const ingredients = await getIngredients(user.uid);
+    const noIdItems = ingredients.filter((i) => !i.myCatalogId && i.isActive);
+    if (noIdItems.length === 0) {
+      setBulkMsg("✅ 未採番の食材はありません");
+      return;
+    }
+    if (!window.confirm(`${noIdItems.length}件の食材にマイカタログIDを採番しますか？`)) return;
+    setBulkAssigning(true);
+    try {
+      let count = 0;
+      for (const item of noIdItems) {
+        const id = await getNextMyCatalogId(user.uid);
+        await updateIngredient(user.uid, item.id, { myCatalogId: id });
+        count++;
+      }
+      setBulkMsg(`✅ ${count}件にIDを採番しました`);
+      getCurrentCounter(user.uid).then(setCatalogCounter);
+    } catch {
+      setBulkMsg("❌ 採番に失敗しました");
+    } finally {
+      setBulkAssigning(false);
+    }
+  };
+
+  const handleCsvImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file || !user) return;
+    setCsvFileName(file.name);
+    setImportMsg("");
+    setImporting(true);
+    try {
+      const token = await user.getIdToken();
+      const formData = new FormData();
+      formData.append("csv", file);
+      const res = await fetch("/api/csv/import", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+      });
+      const json = await res.json() as { added?: number; updated?: number; skipped?: number; error?: string };
+      if (!res.ok) {
+        setImportMsg(`❌ ${json.error ?? "取り込みに失敗しました"}`);
+      } else {
+        setImportMsg(`✅ 追加: ${json.added}件 / 更新: ${json.updated}件 / スキップ: ${json.skipped}件`);
+      }
+    } catch {
+      setImportMsg("❌ 通信エラーが発生しました");
+    } finally {
+      setImporting(false);
+    }
+  };
 
   const handleResetCounter = async () => {
     if (!user) return;
@@ -180,6 +241,56 @@ export default function MenuPage() {
           <p className="text-xs text-muted">
             モバイル版が発行するIDは 10000 以上です。レシプロ本体のIDとは重複しません。
           </p>
+        </div>
+
+        {/* マイカタログID 一括採番 */}
+        <div className="bg-white rounded-2xl shadow-sm p-4 space-y-2">
+          <p className="text-sm text-sub-text font-medium">マイカタログID 一括採番</p>
+          <p className="text-xs text-muted">
+            マイカタログIDが未設定の食材に、自動でIDを発行します。
+          </p>
+          <button
+            onClick={handleBulkAssign}
+            disabled={bulkAssigning}
+            className="w-full py-2.5 text-sm font-medium border rounded-xl transition-colors hover:opacity-80 disabled:opacity-50"
+            style={{ color: "#E85D2C", borderColor: "#E85D2C" }}
+          >
+            {bulkAssigning ? "採番中..." : "未設定食材に一括採番"}
+          </button>
+          {bulkMsg && (
+            <p className={`text-xs text-center ${bulkMsg.startsWith("❌") ? "text-red-500" : "text-gray-500"}`}>
+              {bulkMsg}
+            </p>
+          )}
+        </div>
+
+        {/* レシプロから食材を取り込む */}
+        <div className="bg-white rounded-2xl shadow-sm p-4 space-y-2">
+          <p className="text-sm text-sub-text font-medium">レシプロから食材を取り込む</p>
+          <p className="text-xs text-muted">
+            レシプロから書き出したCSVをアップロードしてください
+          </p>
+          <label className="block cursor-pointer">
+            <div
+              className="w-full py-2.5 text-sm font-medium border border-dashed rounded-xl text-center transition-colors hover:bg-gray-50"
+              style={{ color: importing ? "#999" : "#E85D2C", borderColor: importing ? "#ccc" : "#E85D2C" }}
+            >
+              {importing ? "取り込み中..." : csvFileName ?? "CSVファイルを選択"}
+            </div>
+            <input
+              type="file"
+              accept=".csv"
+              className="hidden"
+              disabled={importing}
+              onChange={handleCsvImport}
+            />
+          </label>
+          <p className="text-xs text-amber-600">⚠ Shift-JIS形式のCSVのみ対応</p>
+          {importMsg && (
+            <p className={`text-xs text-center ${importMsg.startsWith("❌") ? "text-red-500" : "text-gray-500"}`}>
+              {importMsg}
+            </p>
+          )}
         </div>
 
         {/* リンク */}
