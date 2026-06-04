@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/hooks/useAuth";
 import { getUserProfile, getGeneralSettings, savePriceMode, getPendingIngredients, getIngredients, updateIngredient } from "@/lib/firestore";
-import { getCurrentCounter, resetCounter, getNextMyCatalogId } from "@/lib/myCatalogIdGenerator";
+import { getCurrentCounter, getNextMyCatalogId } from "@/lib/myCatalogIdGenerator";
 import { signOut } from "@/lib/auth";
 import { seedAll } from "@/lib/seedData";
 import { IconEditDocument } from "@/components/icons";
@@ -33,7 +33,6 @@ export default function MenuPage() {
   const [priceModeOpen, setPriceModeOpen] = useState(false);
   const [pendingCount, setPendingCount] = useState(0);
   const [catalogCounter, setCatalogCounter] = useState<number | null>(null);
-  const [resetting, setResetting] = useState(false);
   const [bulkAssigning, setBulkAssigning] = useState(false);
   const [bulkMsg, setBulkMsg] = useState("");
   const [importPhase, setImportPhase] = useState<ImportPhase>({ name: "idle" });
@@ -147,18 +146,6 @@ export default function MenuPage() {
       });
     } catch {
       setImportPhase({ name: "error", message: "通信エラーが発生しました" });
-    }
-  };
-
-  const handleResetCounter = async () => {
-    if (!user) return;
-    if (!window.confirm("カウンタを 10000 にリセットしますか？")) return;
-    setResetting(true);
-    try {
-      await resetCounter(user.uid);
-      setCatalogCounter(10000);
-    } finally {
-      setResetting(false);
     }
   };
 
@@ -278,20 +265,11 @@ export default function MenuPage() {
         {/* マイカタログID管理 */}
         <div className="bg-white rounded-2xl shadow-sm p-4 space-y-3">
           <p className="text-sm text-sub-text font-medium">マイカタログID管理</p>
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs text-sub-text">次に発行されるID</p>
-              <p className="text-lg font-bold text-text">
-                {catalogCounter !== null ? catalogCounter.toLocaleString() : "—"}
-              </p>
-            </div>
-            <button
-              onClick={handleResetCounter}
-              disabled={resetting}
-              className="text-xs font-medium px-3 py-1.5 rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50 disabled:opacity-50 transition-colors"
-            >
-              {resetting ? "リセット中..." : "10000 にリセット"}
-            </button>
+          <div>
+            <p className="text-xs text-sub-text">次に発行されるID</p>
+            <p className="text-lg font-bold text-text">
+              {catalogCounter !== null ? catalogCounter.toLocaleString() : "—"}
+            </p>
           </div>
           <p className="text-xs text-muted">
             モバイル版が発行するIDは 10000 以上です。レシプロ本体のIDとは重複しません。

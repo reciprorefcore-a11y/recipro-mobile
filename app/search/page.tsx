@@ -27,6 +27,7 @@ export default function SearchPage() {
   const { user } = useAuth();
   const [ingredients, setIngredients] = useState<Ingredient[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
+  const [supplierFilter, setSupplierFilter] = useState("");
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [seeding, setSeeding] = useState(false);
@@ -53,6 +54,7 @@ export default function SearchPage() {
   }, [companyId]);
 
   const filtered = ingredients.filter((item) => {
+    if (supplierFilter && (item.supplier ?? "") !== supplierFilter) return false;
     if (!searchQuery) return true;
     const q = searchQuery.toLowerCase();
     return (
@@ -61,6 +63,14 @@ export default function SearchPage() {
       normalizeName(item.ingredientName).includes(q)
     );
   });
+
+  const supplierOptions = Array.from(
+    ingredients.reduce((map, item) => {
+      const s = item.supplier ?? "";
+      if (s) map.set(s, (map.get(s) ?? 0) + 1);
+      return map;
+    }, new Map<string, number>())
+  ).sort((a, b) => b[1] - a[1]);
 
   // レシプロ反映の集計（最新のingredients stateから導出）
   const activeIngredients = ingredients.filter((i) => i.isActive);
@@ -175,22 +185,36 @@ export default function SearchPage() {
         )}
 
         {/* 検索ボックス */}
-        <div className="relative">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src="/icons/icon-search.svg"
-            alt=""
-            width={18}
-            height={18}
-            className="absolute left-3 top-1/2 -translate-y-1/2 opacity-50"
-          />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="食材名で検索..."
-            className="w-full rounded-xl border border-gray-200 px-4 py-3 pl-10 text-[16px] outline-none focus:ring-2 focus:ring-primary"
-          />
+        <div className="space-y-2">
+          <div className="relative">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/icons/icon-search.svg"
+              alt=""
+              width={18}
+              height={18}
+              className="absolute left-3 top-1/2 -translate-y-1/2 opacity-50"
+            />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="食材名で検索..."
+              className="w-full rounded-xl border border-gray-200 px-4 py-3 pl-10 text-[16px] outline-none focus:ring-2 focus:ring-primary"
+            />
+          </div>
+          {supplierOptions.length > 0 && (
+            <select
+              value={supplierFilter}
+              onChange={(e) => setSupplierFilter(e.target.value)}
+              className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-[16px] outline-none focus:ring-2 focus:ring-primary text-gray-700"
+            >
+              <option value="">業者: 全て ({ingredients.filter(i => i.supplier).length > 0 ? ingredients.length : 0}件)</option>
+              {supplierOptions.map(([name, count]) => (
+                <option key={name} value={name}>{name}（{count}件）</option>
+              ))}
+            </select>
+          )}
         </div>
 
         {/* 新規追加ボタン */}

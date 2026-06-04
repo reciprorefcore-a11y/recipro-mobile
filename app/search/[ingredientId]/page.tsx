@@ -135,7 +135,6 @@ export default function IngredientDetailPage() {
       await updateIngredient(companyId, ingredient.id, {
         ingredientName: ingredientName.trim(),
         ingredientNameKana: ingredientNameKana.trim(),
-        myCatalogId: myCatalogId.trim(),
         supplierKana: supplierKana.trim(),
         category: category.trim(),
       });
@@ -225,14 +224,12 @@ export default function IngredientDetailPage() {
             ingredient={ingredient}
             ingredientName={ingredientName}
             ingredientNameKana={ingredientNameKana}
-            myCatalogId={myCatalogId}
             supplierKana={supplierKana}
             category={category}
             saving={saving}
             error={error}
             onIngredientNameChange={setIngredientName}
             onIngredientNameKanaChange={setIngredientNameKana}
-            onMyCatalogIdChange={setMyCatalogId}
             onSupplierKanaChange={setSupplierKana}
             onCategoryChange={setCategory}
             onSubmit={handleAdvancedSave}
@@ -385,14 +382,12 @@ function AdvancedEditView({
   ingredient,
   ingredientName,
   ingredientNameKana,
-  myCatalogId,
   supplierKana,
   category,
   saving,
   error,
   onIngredientNameChange,
   onIngredientNameKanaChange,
-  onMyCatalogIdChange,
   onSupplierKanaChange,
   onCategoryChange,
   onSubmit,
@@ -400,14 +395,12 @@ function AdvancedEditView({
   ingredient: Ingredient;
   ingredientName: string;
   ingredientNameKana: string;
-  myCatalogId: string;
   supplierKana: string;
   category: string;
   saving: boolean;
   error: string;
   onIngredientNameChange: (value: string) => void;
   onIngredientNameKanaChange: (value: string) => void;
-  onMyCatalogIdChange: (value: string) => void;
   onSupplierKanaChange: (value: string) => void;
   onCategoryChange: (value: string) => void;
   onSubmit: (e: React.FormEvent) => void;
@@ -431,11 +424,13 @@ function AdvancedEditView({
             value={ingredientNameKana}
             onChange={(e) => onIngredientNameKanaChange(e.target.value)}
           />
-          <Input
-            label="マイカタログID"
-            value={myCatalogId}
-            onChange={(e) => onMyCatalogIdChange(e.target.value)}
-          />
+          <div>
+            <label className="block text-sm font-medium mb-1 text-gray-700">マイカタログID</label>
+            <p className="rounded-xl border border-gray-100 bg-gray-50 px-4 py-3 text-[16px] text-gray-500">
+              {ingredient.myCatalogId || "未設定"}
+            </p>
+            <p className="mt-1 text-xs text-gray-400">※レシプロ本体との紐付けのため変更できません</p>
+          </div>
           <Input
             label="取引先名カナ"
             value={supplierKana}
