@@ -25,7 +25,9 @@ export async function verifyIdToken(
   try {
     const decoded = await getApp().auth().verifyIdToken(token);
     return { uid: decoded.uid };
-  } catch {
+  } catch (e) {
+    // Vercel function logsで原因を確認できるよう記録
+    console.error("[firebaseAdmin] verifyIdToken failed:", e instanceof Error ? e.message : String(e));
     return null;
   }
 }

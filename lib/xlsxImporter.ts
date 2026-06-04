@@ -1,5 +1,3 @@
-import * as XLSX from "xlsx";
-
 export type XlsxRow = {
   myCatalogId: string;
   ingredientName: string;
@@ -53,7 +51,10 @@ function num(row: (string | number | boolean | null | undefined)[], idx: number)
   return Number.isFinite(n) ? n : undefined;
 }
 
-export function parseReciproXlsx(buffer: Buffer | ArrayBuffer): XlsxRow[] {
+// dynamic importを使用してVercel環境でのバンドル問題を回避
+export async function parseReciproXlsx(buffer: Buffer): Promise<XlsxRow[]> {
+  const XLSX = (await import("xlsx")).default ?? await import("xlsx");
+
   const workbook = XLSX.read(buffer, { type: "buffer" });
 
   const sheet =
@@ -62,12 +63,12 @@ export function parseReciproXlsx(buffer: Buffer | ArrayBuffer): XlsxRow[] {
   if (!sheet) return [];
 
   type RawRow = (string | number | boolean | null | undefined)[];
-  const allRows = XLSX.utils.sheet_to_json<RawRow>(sheet, {
+  const allRows: RawRow[] = XLSX.utils.sheet_to_json(sheet, {
     header: 1,
     defval: null,
   });
 
-  // ヘッダー行(先頭から最初に myCatalogId が数値の行)を見つけてスキップ
+  // ヘッダー行を探す: 先頭から最初に myCatalogId が数値の行がデータ開始行
   let dataStart = 1;
   for (let i = 0; i < Math.min(allRows.length, 5); i++) {
     const row = allRows[i];
@@ -86,7 +87,7 @@ export function parseReciproXlsx(buffer: Buffer | ArrayBuffer): XlsxRow[] {
     const ingredientName = str(row, COL.INGREDIENT_NAME);
 
     if (!myCatalogId || !ingredientName) continue;
-    if (isNaN(Number(myCatalogId))) continue; // 数値IDのみ対象
+    if (isNaN(Number(myCatalogId))) continue;
 
     results.push({
       myCatalogId,
