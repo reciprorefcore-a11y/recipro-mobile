@@ -2,6 +2,16 @@ import type { Timestamp } from "firebase/firestore";
 
 export type CostSource = "estimated" | "recipro" | "user_confirmed";
 
+export type Supplier = {
+  id: string;
+  companyId: string;
+  name: string;
+  nameKana?: string;
+  usageCount: number;
+  createdAt?: Timestamp;
+  updatedAt?: Timestamp;
+};
+
 export type PriceMode = "taxIncluded" | "taxExcluded";
 
 export type GeneralSettings = {
