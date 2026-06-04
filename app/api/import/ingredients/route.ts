@@ -3,6 +3,9 @@ import { FieldValue } from "firebase-admin/firestore";
 import iconv from "iconv-lite";
 import { parseReciproXlsx, type XlsxRow } from "@/lib/xlsxImporter";
 
+// Vercel: Hobby=10s cap, Pro=最大300s
+export const maxDuration = 60;
+
 // CSVをパース (csvGenerator.ts のカラム順に準拠)
 function parseCsvText(text: string): XlsxRow[] {
   const rows: string[][] = [];
@@ -60,23 +63,19 @@ export async function POST(request: Request) {
   const token = authHeader?.replace(/^Bearer\s+/i, "").trim();
 
   if (!token) {
-    console.warn("[import/ingredients] Authorization header missing or empty");
     return Response.json(
       { error: "ログインが必要です。再ログインしてお試しください。" },
       { status: 401 }
     );
   }
 
-  console.log("[import/ingredients] Verifying token, prefix:", token.slice(0, 10));
   const user = await verifyIdToken(token);
   if (!user) {
-    console.warn("[import/ingredients] verifyIdToken returned null — check FIREBASE_SERVICE_ACCOUNT_KEY in Vercel env");
     return Response.json(
       { error: "認証に失敗しました。ログインし直してお試しください。" },
       { status: 401 }
     );
   }
-  console.log("[import/ingredients] Authenticated uid:", user.uid);
 
   // ── リクエストのパース ────────────────────────────────────
   let formData: FormData;
@@ -117,7 +116,10 @@ export async function POST(request: Request) {
   }
 
   if (rows.length === 0) {
-    return Response.json({ error: "有効なデータが含まれていません。ファイル形式を確認してください。" }, { status: 400 });
+    return Response.json(
+      { error: "有効なデータが含まれていません。ファイル形式を確認してください。" },
+      { status: 400 }
+    );
   }
 
   // 取引先を集計
@@ -139,127 +141,152 @@ export async function POST(request: Request) {
   }
 
   // ── Firestoreへ保存 ───────────────────────────────────────
-  const companyId = user.uid;
-  const db = getAdminDb();
-  const ingredientsCol = db
-    .collection("companies")
-    .doc(companyId)
-    .collection("ingredients");
-  const suppliersCol = db
-    .collection("companies")
-    .doc(companyId)
-    .collection("suppliers");
-
-  // 既存データを一括取得
-  const [existingSnap, existingSupplierSnap] = await Promise.all([
-    ingredientsCol.get(),
-    suppliersCol.get(),
-  ]);
-
-  const existingByMyCatalogId = new Map<string, string>();
-  for (const d of existingSnap.docs) {
-    const mid = d.data().myCatalogId as string | undefined;
-    if (mid) existingByMyCatalogId.set(mid, d.id);
+  // ※ Firestore 操作は全体を try-catch で囲む
+  //   例外が漏れると Next.js が HTML 500 を返し、クライアントが
+  //   JSON parse に失敗して「通信エラー」と表示されてしまう
+  let db: FirebaseFirestore.Firestore;
+  try {
+    db = getAdminDb();
+  } catch (e) {
+    console.error("[import/ingredients] getAdminDb failed:", e instanceof Error ? e.message : e);
+    return Response.json(
+      { error: "データベース接続に失敗しました。FIREBASE_SERVICE_ACCOUNT_KEY を確認してください。" },
+      { status: 500 }
+    );
   }
 
-  const existingSupplierNames = new Set(
-    existingSupplierSnap.docs.map((d) => d.data().name as string)
-  );
+  try {
+    const companyId = user.uid;
+    const ingredientsCol = db
+      .collection("companies")
+      .doc(companyId)
+      .collection("ingredients");
+    const suppliersCol = db
+      .collection("companies")
+      .doc(companyId)
+      .collection("suppliers");
 
-  let added = 0, updated = 0, skipped = 0;
-  const now = FieldValue.serverTimestamp();
+    // 既存データを一括取得（並列）
+    const [existingSnap, existingSupplierSnap] = await Promise.all([
+      ingredientsCol.get(),
+      suppliersCol.get(),
+    ]);
 
-  // ── 食材をバッチ書き込み (Firestoreの上限は500ops/batch) ──
-  const BATCH_SIZE = 400;
-  let batch = db.batch();
-  let opsInBatch = 0;
-
-  const flushBatch = async () => {
-    if (opsInBatch > 0) {
-      await batch.commit();
-      batch = db.batch();
-      opsInBatch = 0;
+    const existingByMyCatalogId = new Map<string, string>();
+    for (const d of existingSnap.docs) {
+      const mid = d.data().myCatalogId as string | undefined;
+      if (mid) existingByMyCatalogId.set(mid, d.id);
     }
-  };
 
-  for (const row of rows) {
-    if (!row.myCatalogId || !row.ingredientName) { skipped++; continue; }
+    const existingSupplierNames = new Set(
+      existingSupplierSnap.docs.map((d) => d.data().name as string)
+    );
 
-    const data: Record<string, unknown> = {
-      myCatalogId: row.myCatalogId,
-      ingredientName: row.ingredientName,
-      companyId,
-      ...(row.ingredientNameKana && { ingredientNameKana: row.ingredientNameKana }),
-      ...(row.smaregiCode && { smaregiCode: row.smaregiCode }),
-      ...(row.spec && { spec: row.spec }),
-      unit: row.unit,
-      currentPrice: row.currentPrice,
-      ...(row.oldPrice !== undefined && { oldPrice: row.oldPrice }),
-      ...(row.supplier && { supplier: row.supplier }),
-      ...(row.supplierKana && { supplierKana: row.supplierKana }),
-      ...(row.globalCategory && { globalCategory: row.globalCategory }),
-      ...(row.globalCategoryId && { globalCategoryId: row.globalCategoryId }),
-      ...(row.category && { category: row.category }),
-      ...(row.irisu && { irisu: row.irisu }),
-      isActive: true,
-      updatedAt: now,
+    let added = 0, updated = 0, skipped = 0;
+    const now = FieldValue.serverTimestamp();
+
+    // ── 食材をバッチ書き込み (Firestoreの上限は500ops/batch) ──
+    const BATCH_SIZE = 400;
+    let batch = db.batch();
+    let opsInBatch = 0;
+
+    const flushBatch = async () => {
+      if (opsInBatch > 0) {
+        await batch.commit();
+        batch = db.batch();
+        opsInBatch = 0;
+      }
     };
 
-    const existingId = existingByMyCatalogId.get(row.myCatalogId);
-    if (existingId) {
-      batch.update(ingredientsCol.doc(existingId), data);
-      updated++;
-    } else {
-      const uniqueId = `${companyId.slice(0, 8)}_recipro_${row.myCatalogId}`;
-      const newRef = ingredientsCol.doc();
-      batch.set(newRef, { ...data, uniqueId, createdAt: now });
-      added++;
-    }
+    for (const row of rows) {
+      if (!row.myCatalogId || !row.ingredientName) { skipped++; continue; }
 
-    opsInBatch++;
-    if (opsInBatch >= BATCH_SIZE) {
-      await flushBatch();
-    }
-  }
-  await flushBatch();
-
-  // ── 取引先マスタをバッチ upsert ──────────────────────────
-  const newSuppliers: string[] = [];
-  const supplierBatch = db.batch();
-
-  for (const { name, nameKana } of suppliers) {
-    const docId = makeSupplierDocId(name);
-    const ref = suppliersCol.doc(docId);
-    if (existingSupplierNames.has(name)) {
-      supplierBatch.update(ref, {
-        usageCount: FieldValue.increment(1),
-        updatedAt: now,
-      });
-    } else {
-      supplierBatch.set(ref, {
-        name,
-        nameKana: nameKana ?? null,
+      const data: Record<string, unknown> = {
+        myCatalogId: row.myCatalogId,
+        ingredientName: row.ingredientName,
         companyId,
-        usageCount: 1,
-        createdAt: now,
+        ...(row.ingredientNameKana && { ingredientNameKana: row.ingredientNameKana }),
+        ...(row.smaregiCode && { smaregiCode: row.smaregiCode }),
+        ...(row.spec && { spec: row.spec }),
+        unit: row.unit,
+        currentPrice: row.currentPrice,
+        ...(row.oldPrice !== undefined && { oldPrice: row.oldPrice }),
+        ...(row.supplier && { supplier: row.supplier }),
+        ...(row.supplierKana && { supplierKana: row.supplierKana }),
+        ...(row.globalCategory && { globalCategory: row.globalCategory }),
+        ...(row.globalCategoryId && { globalCategoryId: row.globalCategoryId }),
+        ...(row.category && { category: row.category }),
+        ...(row.irisu && { irisu: row.irisu }),
+        isActive: true,
         updatedAt: now,
-      });
-      newSuppliers.push(name);
+      };
+
+      const existingId = existingByMyCatalogId.get(row.myCatalogId);
+      if (existingId) {
+        batch.update(ingredientsCol.doc(existingId), data);
+        updated++;
+      } else {
+        const uniqueId = `${companyId.slice(0, 8)}_recipro_${row.myCatalogId}`;
+        const newRef = ingredientsCol.doc();
+        batch.set(newRef, { ...data, uniqueId, createdAt: now });
+        added++;
+      }
+
+      opsInBatch++;
+      if (opsInBatch >= BATCH_SIZE) {
+        await flushBatch();
+      }
     }
+    await flushBatch();
+
+    // ── 取引先マスタをバッチ upsert ──────────────────────────
+    const newSuppliers: string[] = [];
+    const supplierBatch = db.batch();
+
+    for (const { name, nameKana } of suppliers) {
+      const docId = makeSupplierDocId(name);
+      const ref = suppliersCol.doc(docId);
+      if (existingSupplierNames.has(name)) {
+        supplierBatch.update(ref, {
+          usageCount: FieldValue.increment(1),
+          updatedAt: now,
+        });
+      } else {
+        supplierBatch.set(ref, {
+          name,
+          nameKana: nameKana ?? null,
+          companyId,
+          usageCount: 1,
+          createdAt: now,
+          updatedAt: now,
+        });
+        newSuppliers.push(name);
+      }
+    }
+
+    if (suppliers.length > 0) {
+      await supplierBatch.commit();
+    }
+
+    console.log(
+      `[import/ingredients] uid=${companyId} added=${added} updated=${updated} skipped=${skipped} suppliers=${suppliers.length}`
+    );
+
+    return Response.json({
+      added,
+      updated,
+      skipped,
+      supplierCount: suppliers.length,
+      newSupplierCount: newSuppliers.length,
+      suppliers: suppliers.map((s) => s.name),
+    });
+
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error("[import/ingredients] Firestore error:", msg);
+    return Response.json(
+      { error: `保存中にエラーが発生しました: ${msg}` },
+      { status: 500 }
+    );
   }
-
-  if (suppliers.length > 0) {
-    await supplierBatch.commit();
-  }
-
-  console.log(`[import/ingredients] companyId=${companyId} added=${added} updated=${updated} skipped=${skipped} suppliers=${suppliers.length}`);
-
-  return Response.json({
-    added,
-    updated,
-    skipped,
-    supplierCount: suppliers.length,
-    newSupplierCount: newSuppliers.length,
-    suppliers: suppliers.map((s) => s.name),
-  });
 }
