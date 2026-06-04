@@ -7,6 +7,7 @@ import { useAuth } from "@/hooks/useAuth";
 import {
   addPriceHistory,
   getIngredient,
+  getIngredients,
   updateIngredient,
 } from "@/lib/firestore";
 import { formatDaysAgo } from "@/lib/utils";
@@ -14,6 +15,7 @@ import type { Ingredient } from "@/types";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import Input from "@/components/ui/Input";
+import SupplierSelect from "@/components/SupplierSelect";
 
 const UNITS = ["kg", "g", "個", "L", "ml", "本", "袋", "ケース", "パック", "枚", "cc"];
 
@@ -30,6 +32,7 @@ export default function IngredientDetailPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [suppliers, setSuppliers] = useState<string[]>([]);
 
   const [currentPrice, setCurrentPrice] = useState("");
   const [oldPrice, setOldPrice] = useState("");
@@ -63,15 +66,20 @@ export default function IngredientDetailPage() {
   useEffect(() => {
     if (!companyId || !ingredientId) return;
     let ignore = false;
-    getIngredient(companyId, ingredientId)
-      .then((data) => {
-        if (ignore) return;
-        setIngredient(data);
-        if (data) syncForm(data);
-      })
-      .finally(() => {
-        if (!ignore) setLoading(false);
-      });
+    Promise.all([
+      getIngredient(companyId, ingredientId),
+      getIngredients(companyId),
+    ]).then(([data, all]) => {
+      if (ignore) return;
+      setIngredient(data);
+      if (data) syncForm(data);
+      const names = Array.from(
+        new Set(all.map((i) => i.supplier).filter((s): s is string => !!s))
+      );
+      setSuppliers(names);
+    }).finally(() => {
+      if (!ignore) setLoading(false);
+    });
     return () => {
       ignore = true;
     };
@@ -209,6 +217,7 @@ export default function IngredientDetailPage() {
             isActive={isActive}
             saving={saving}
             error={error}
+            suppliers={suppliers}
             onIngredientNameChange={setIngredientName}
             onCurrentPriceChange={setCurrentPrice}
             onOldPriceChange={setOldPrice}
@@ -251,6 +260,7 @@ function MainEditView({
   isActive,
   saving,
   error,
+  suppliers,
   onIngredientNameChange,
   onCurrentPriceChange,
   onOldPriceChange,
@@ -271,6 +281,7 @@ function MainEditView({
   isActive: boolean;
   saving: boolean;
   error: string;
+  suppliers: string[];
   onIngredientNameChange: (value: string) => void;
   onCurrentPriceChange: (value: string) => void;
   onOldPriceChange: (value: string) => void;
@@ -315,12 +326,14 @@ function MainEditView({
             onChange={(e) => onOldPriceChange(e.target.value)}
             min="0"
           />
-          <Input
-            label="仕入先"
-            value={supplier}
-            onChange={(e) => onSupplierChange(e.target.value)}
-            placeholder="例: 田中精肉店"
-          />
+          <div>
+            <label className="block text-sm font-medium mb-1">仕入先</label>
+            <SupplierSelect
+              value={supplier}
+              onChange={onSupplierChange}
+              suppliers={suppliers}
+            />
+          </div>
           <Input
             label="規格"
             value={spec}

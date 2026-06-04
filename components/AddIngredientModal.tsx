@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Input from "./ui/Input";
 import Button from "./ui/Button";
+import SupplierSelect from "./SupplierSelect";
 
 type AddData = {
   ingredientName: string;
@@ -16,11 +17,12 @@ type Props = {
   isOpen: boolean;
   onClose: () => void;
   onAdd: (data: AddData) => Promise<void>;
+  suppliers?: string[];
 };
 
 const UNITS = ["kg", "g", "個", "L", "缶", "パック", "本", "枚"];
 
-export default function AddIngredientModal({ isOpen, onClose, onAdd }: Props) {
+export default function AddIngredientModal({ isOpen, onClose, onAdd, suppliers = [] }: Props) {
   const [ingredientName, setIngredientName] = useState("");
   const [ingredientNameKana, setIngredientNameKana] = useState("");
   const [unit, setUnit] = useState("kg");
@@ -138,13 +140,14 @@ export default function AddIngredientModal({ isOpen, onClose, onAdd }: Props) {
             min="0"
             required
           />
-          <Input
-            label="仕入先 (任意)"
-            type="text"
-            value={supplier}
-            onChange={(e) => setSupplier(e.target.value)}
-            placeholder="例: 田中精肉店"
-          />
+          <div>
+            <label className="block text-sm font-medium mb-1">仕入先 (任意)</label>
+            <SupplierSelect
+              value={supplier}
+              onChange={setSupplier}
+              suppliers={suppliers}
+            />
+          </div>
 
           {error && (
             <p className="text-sm text-red-500 bg-red-50 rounded-xl p-3">{error}</p>

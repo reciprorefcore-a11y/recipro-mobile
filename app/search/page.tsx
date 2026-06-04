@@ -323,6 +323,7 @@ export default function SearchPage() {
         isOpen={modalOpen}
         onClose={() => setModalOpen(false)}
         onAdd={handleAdd}
+        suppliers={supplierOptions.map(([name]) => name)}
       />
 
       {/* CSVダウンロード成功モーダル */}
