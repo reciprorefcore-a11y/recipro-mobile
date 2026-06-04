@@ -50,6 +50,10 @@ function parseCsvText(text: string): XlsxRow[] {
   });
 }
 
+function makeSupplierDocId(name: string): string {
+  return encodeURIComponent(name).replace(/%/g, "_").slice(0, 50);
+}
+
 export async function POST(request: Request) {
   // ── 認証チェック ──────────────────────────────────────────
   const authHeader = request.headers.get("Authorization");
@@ -144,20 +148,37 @@ export async function POST(request: Request) {
     .doc(companyId)
     .collection("suppliers");
 
-  const existingSnap = await ingredientsCol.get();
+  // 既存データを一括取得
+  const [existingSnap, existingSupplierSnap] = await Promise.all([
+    ingredientsCol.get(),
+    suppliersCol.get(),
+  ]);
+
   const existingByMyCatalogId = new Map<string, string>();
   for (const d of existingSnap.docs) {
     const mid = d.data().myCatalogId as string | undefined;
     if (mid) existingByMyCatalogId.set(mid, d.id);
   }
 
-  const existingSupplierSnap = await suppliersCol.get();
   const existingSupplierNames = new Set(
     existingSupplierSnap.docs.map((d) => d.data().name as string)
   );
 
   let added = 0, updated = 0, skipped = 0;
   const now = FieldValue.serverTimestamp();
+
+  // ── 食材をバッチ書き込み (Firestoreの上限は500ops/batch) ──
+  const BATCH_SIZE = 400;
+  let batch = db.batch();
+  let opsInBatch = 0;
+
+  const flushBatch = async () => {
+    if (opsInBatch > 0) {
+      await batch.commit();
+      batch = db.batch();
+      opsInBatch = 0;
+    }
+  };
 
   for (const row of rows) {
     if (!row.myCatalogId || !row.ingredientName) { skipped++; continue; }
@@ -184,26 +205,36 @@ export async function POST(request: Request) {
 
     const existingId = existingByMyCatalogId.get(row.myCatalogId);
     if (existingId) {
-      await ingredientsCol.doc(existingId).update(data);
+      batch.update(ingredientsCol.doc(existingId), data);
       updated++;
     } else {
       const uniqueId = `${companyId.slice(0, 8)}_recipro_${row.myCatalogId}`;
-      await ingredientsCol.add({ ...data, uniqueId, createdAt: now });
+      const newRef = ingredientsCol.doc();
+      batch.set(newRef, { ...data, uniqueId, createdAt: now });
       added++;
     }
-  }
 
-  // 取引先マスタを upsert
+    opsInBatch++;
+    if (opsInBatch >= BATCH_SIZE) {
+      await flushBatch();
+    }
+  }
+  await flushBatch();
+
+  // ── 取引先マスタをバッチ upsert ──────────────────────────
   const newSuppliers: string[] = [];
+  const supplierBatch = db.batch();
+
   for (const { name, nameKana } of suppliers) {
-    const docId = name.replace(/[^\w　-鿿]/g, "_").slice(0, 50);
+    const docId = makeSupplierDocId(name);
+    const ref = suppliersCol.doc(docId);
     if (existingSupplierNames.has(name)) {
-      await suppliersCol.doc(docId).update({
+      supplierBatch.update(ref, {
         usageCount: FieldValue.increment(1),
         updatedAt: now,
       });
     } else {
-      await suppliersCol.doc(docId).set({
+      supplierBatch.set(ref, {
         name,
         nameKana: nameKana ?? null,
         companyId,
@@ -213,6 +244,10 @@ export async function POST(request: Request) {
       });
       newSuppliers.push(name);
     }
+  }
+
+  if (suppliers.length > 0) {
+    await supplierBatch.commit();
   }
 
   console.log(`[import/ingredients] companyId=${companyId} added=${added} updated=${updated} skipped=${skipped} suppliers=${suppliers.length}`);

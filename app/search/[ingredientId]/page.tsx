@@ -81,6 +81,11 @@ export default function IngredientDetailPage() {
     e.preventDefault();
     if (!ingredient || !companyId) return;
 
+    if (!ingredientName.trim()) {
+      setError("商品名を入力してください");
+      return;
+    }
+
     const nextPrice = toRequiredNumber(currentPrice, "現在単価");
     const nextOldPrice = toOptionalNumber(oldPrice, "旧単価");
     if (nextPrice.error || nextOldPrice.error) {
@@ -92,6 +97,7 @@ export default function IngredientDetailPage() {
     setError("");
     try {
       await updateIngredient(companyId, ingredient.id, {
+        ingredientName: ingredientName.trim(),
         currentPrice: nextPrice.value,
         oldPrice: nextOldPrice.value,
         supplier: supplier.trim(),
@@ -103,7 +109,7 @@ export default function IngredientDetailPage() {
       if (nextPrice.value !== ingredient.currentPrice) {
         await addPriceHistory(companyId, {
           ingredientId: ingredient.id,
-          ingredientName: ingredient.ingredientName,
+          ingredientName: ingredientName.trim(),
           price: nextPrice.value,
         });
       }
@@ -195,6 +201,7 @@ export default function IngredientDetailPage() {
         {mode === "main" ? (
           <MainEditView
             ingredient={ingredient}
+            ingredientName={ingredientName}
             currentPrice={currentPrice}
             oldPrice={oldPrice}
             supplier={supplier}
@@ -203,6 +210,7 @@ export default function IngredientDetailPage() {
             isActive={isActive}
             saving={saving}
             error={error}
+            onIngredientNameChange={setIngredientName}
             onCurrentPriceChange={setCurrentPrice}
             onOldPriceChange={setOldPrice}
             onSupplierChange={setSupplier}
@@ -237,6 +245,7 @@ export default function IngredientDetailPage() {
 
 function MainEditView({
   ingredient,
+  ingredientName,
   currentPrice,
   oldPrice,
   supplier,
@@ -245,6 +254,7 @@ function MainEditView({
   isActive,
   saving,
   error,
+  onIngredientNameChange,
   onCurrentPriceChange,
   onOldPriceChange,
   onSupplierChange,
@@ -255,6 +265,7 @@ function MainEditView({
   onOpenAdvanced,
 }: {
   ingredient: Ingredient;
+  ingredientName: string;
   currentPrice: string;
   oldPrice: string;
   supplier: string;
@@ -263,6 +274,7 @@ function MainEditView({
   isActive: boolean;
   saving: boolean;
   error: string;
+  onIngredientNameChange: (value: string) => void;
   onCurrentPriceChange: (value: string) => void;
   onOldPriceChange: (value: string) => void;
   onSupplierChange: (value: string) => void;
@@ -275,19 +287,22 @@ function MainEditView({
   return (
     <>
       <Card>
-        <p className="text-2xl font-bold leading-tight text-gray-900">
-          {ingredient.ingredientName}
-        </p>
-        <p className="mt-1 text-xs text-gray-400">
+        <p className="text-xs text-gray-400">
           マイカタログID: {ingredient.myCatalogId || "未設定"}
         </p>
-        <p className="mt-3 text-xs text-gray-500">
+        <p className="mt-1 text-xs text-gray-500">
           最終更新: {formatDaysAgo(ingredient.updatedAt)}
         </p>
       </Card>
 
       <Card>
         <form onSubmit={onSubmit} className="space-y-4">
+          <Input
+            label="商品名"
+            value={ingredientName}
+            onChange={(e) => onIngredientNameChange(e.target.value)}
+            required
+          />
           <Input
             label="現在単価 (円)"
             type="number"

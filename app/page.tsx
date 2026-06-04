@@ -32,11 +32,17 @@ export default function HomePage() {
 
   useEffect(() => {
     if (!user) return;
+
+    // storeName は critical path 外で非同期に取得
+    getUserProfile(user.uid).then((profile) => {
+      if (profile) setStoreName(profile.storeName);
+    });
+
+    // オンボーディング判定 + 商品リストを並列取得
     Promise.all([
-      getUserProfile(user.uid),
       getProducts(user.uid),
       getOnboardingSettings(user.uid),
-    ]).then(([profile, prods, onboarding]) => {
+    ]).then(([prods, onboarding]) => {
       if (!onboarding) {
         if (prods.length === 0) {
           initOnboarding(user.uid).catch(console.error);
@@ -48,7 +54,6 @@ export default function HomePage() {
         return;
       }
 
-      if (profile) setStoreName(profile.storeName);
       setProducts(prods);
       if (onboarding?.completedSteps) {
         setCompletedSteps(onboarding.completedSteps);
@@ -69,9 +74,16 @@ export default function HomePage() {
 
   if (!ready) {
     return (
-      <div className="min-h-screen flex items-center justify-center text-sm text-gray-500">
-        読み込み中...
-      </div>
+      <main className="min-h-screen bg-gray-50 flex justify-center">
+        <div className="w-full max-w-[480px] px-4 py-6 space-y-4 animate-pulse">
+          <div className="h-8 bg-gray-200 rounded w-36" />
+          <div className="h-24 bg-gray-200 rounded-xl" />
+          <div className="h-20 bg-gray-200 rounded-xl" />
+          <div className="h-14 bg-gray-200 rounded-xl" />
+          <div className="h-14 bg-gray-200 rounded-xl" />
+          <div className="h-14 bg-gray-200 rounded-xl" />
+        </div>
+      </main>
     );
   }
 
