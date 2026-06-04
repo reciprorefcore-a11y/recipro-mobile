@@ -7,8 +7,7 @@ function getApp(): admin.app.App {
 
   const serviceAccountJson = process.env.FIREBASE_SERVICE_ACCOUNT_KEY;
   if (!serviceAccountJson) {
-    console.error("[firebaseAdmin] FIREBASE_SERVICE_ACCOUNT_KEY is not set");
-    return admin.initializeApp();
+    throw new Error("FIREBASE_SERVICE_ACCOUNT_KEY is not set");
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -20,7 +19,13 @@ function getApp(): admin.app.App {
     serviceAccount.private_key = serviceAccount.private_key.replace(/\\n/g, "\n");
   }
 
-  return admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
+  const projectId: string = serviceAccount.project_id ?? process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID ?? "";
+  console.log("[firebaseAdmin] init projectId:", projectId || "(empty)", "hasPrivateKey:", !!serviceAccount.private_key, "hasClientEmail:", !!serviceAccount.client_email);
+
+  return admin.initializeApp({
+    credential: admin.credential.cert(serviceAccount),
+    projectId: projectId || undefined,
+  });
 }
 
 export function getAdminDb(): admin.firestore.Firestore {
