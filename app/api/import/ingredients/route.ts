@@ -60,21 +60,23 @@ export async function POST(request: Request) {
   const token = authHeader?.replace(/^Bearer\s+/i, "").trim();
 
   if (!token) {
-    console.warn("[import/ingredients] Authorization header missing");
+    console.warn("[import/ingredients] Authorization header missing or empty");
     return Response.json(
       { error: "ログインが必要です。再ログインしてお試しください。" },
       { status: 401 }
     );
   }
 
+  console.log("[import/ingredients] Verifying token, prefix:", token.slice(0, 10));
   const user = await verifyIdToken(token);
   if (!user) {
-    console.warn("[import/ingredients] verifyIdToken returned null. Token prefix:", token.slice(0, 20));
+    console.warn("[import/ingredients] verifyIdToken returned null — check FIREBASE_SERVICE_ACCOUNT_KEY in Vercel env");
     return Response.json(
-      { error: "認証に失敗しました。再ログインしてお試しください。" },
+      { error: "認証に失敗しました。ログインし直してお試しください。" },
       { status: 401 }
     );
   }
+  console.log("[import/ingredients] Authenticated uid:", user.uid);
 
   // ── リクエストのパース ────────────────────────────────────
   let formData: FormData;

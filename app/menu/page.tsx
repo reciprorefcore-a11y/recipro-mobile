@@ -82,7 +82,7 @@ export default function MenuPage() {
     setImportPhase({ name: "previewing", file, total: 0, suppliers: [], supplierCount: 0 });
 
     try {
-      const token = await user.getIdToken();
+      const token = await user.getIdToken(/* forceRefresh */ true);
       const formData = new FormData();
       formData.append("file", file);
       formData.append("preview", "true");
@@ -117,7 +117,7 @@ export default function MenuPage() {
     setImportPhase({ name: "importing" });
 
     try {
-      const token = await user.getIdToken();
+      const token = await user.getIdToken(/* forceRefresh */ true);
       const formData = new FormData();
       formData.append("file", file);
 
