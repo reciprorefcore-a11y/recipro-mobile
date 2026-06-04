@@ -41,7 +41,6 @@ export default function SetupProgressBar({ completedSteps, onImportClick }: Prop
   }, [completedCount]);
 
   if (hidden) return null;
-  if (completedCount === 0) return null;
   if (completedCount < TOTAL_STEPS && !showComplete) {
     const remaining = TOTAL_STEPS - completedCount;
     return (

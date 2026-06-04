@@ -55,8 +55,12 @@ export default function HomePage() {
       }
 
       setProducts(prods);
+      // onboardingSkipped でも completedSteps を設定してホームにバナーを出す
       if (onboarding?.completedSteps) {
         setCompletedSteps(onboarding.completedSteps);
+      } else if (onboarding && !onboarding.onboardingCompleted) {
+        // completedSteps フィールドがない古いデータへの互換
+        setCompletedSteps({ ingredientMaster: false, menuImport: false, confirmation: false });
       }
       setReady(true);
     });

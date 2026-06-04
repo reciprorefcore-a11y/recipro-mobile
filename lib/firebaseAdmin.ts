@@ -9,11 +9,14 @@ function getApp(): admin.app.App {
     return admin.initializeApp();
   }
 
+  // NOTE: JSON.parse "前" に replace してはいけない
+  // JSON 中の \n は2文字のエスケープシーケンスとして正常に parse される
+  // pre-parse replace すると raw newline が string 内に入り JSON が壊れる
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const serviceAccount = JSON.parse(serviceAccountJson) as any;
 
-  // Vercel環境では private_key の \n がエスケープされたまま残ることがある
-  // JSON.parse 後に修正する
+  // Vercel で稀に private_key の \n が \\n のまま残るケースにのみ対応
+  // JSON.parse 後の値に対して実施するため安全
   if (typeof serviceAccount.private_key === "string") {
     serviceAccount.private_key = serviceAccount.private_key.replace(/\\n/g, "\n");
   }
