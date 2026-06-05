@@ -168,7 +168,8 @@ export default function HomePage() {
       >
         {/* ヘッダー */}
         <div className="flex items-center justify-between shrink-0">
-          <ReciproLogo width={120} />
+          <ReciproLogo width={110} />
+          <WeatherWidget variant="inline" />
           <button
             type="button"
             onClick={() => router.push("/menu")}
@@ -178,9 +179,6 @@ export default function HomePage() {
             {avatarLetter}
           </button>
         </div>
-
-        {/* 天気ウィジェット */}
-        <WeatherWidget />
 
         {/* 今月の価格変動カード */}
         <button
