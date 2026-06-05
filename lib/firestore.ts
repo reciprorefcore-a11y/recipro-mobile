@@ -39,6 +39,16 @@ export async function getUserProfile(uid: string): Promise<UserProfile | null> {
   return snap.data() as UserProfile;
 }
 
+export async function saveStoreInfo(
+  uid: string,
+  data: Partial<Pick<UserProfile, "storeName" | "address" | "zipCode" | "phone" | "fax" | "personInCharge">>
+): Promise<void> {
+  await updateDoc(doc(db, "users", uid), {
+    ...data,
+    updatedAt: serverTimestamp(),
+  });
+}
+
 // ─── Ingredients ─────────────────────────────────────────
 
 function ingredientsCol(companyId: string) {
@@ -528,4 +538,14 @@ export async function saveOrder(
     createdAt: serverTimestamp(),
   });
   return ref.id;
+}
+
+export async function getOrders(companyId: string, maxCount = 20): Promise<Order[]> {
+  const q = query(
+    collection(db, "companies", companyId, "orders"),
+    orderBy("createdAt", "desc"),
+    limit(maxCount)
+  );
+  const snap = await getDocs(q);
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() } as Order));
 }

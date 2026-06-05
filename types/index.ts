@@ -78,6 +78,11 @@ export type UserProfile = {
   companyName: string;
   storeName: string;
   role: "owner";
+  address?: string;
+  zipCode?: string;
+  phone?: string;
+  fax?: string;
+  personInCharge?: string;
   createdAt: Timestamp;
   updatedAt: Timestamp;
 };

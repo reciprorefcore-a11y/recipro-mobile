@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/hooks/useAuth";
-import { getUserProfile, getGeneralSettings, savePriceMode, getPendingIngredients, getIngredients, updateIngredient } from "@/lib/firestore";
+import { getUserProfile, getGeneralSettings, savePriceMode, getPendingIngredients, getIngredients, updateIngredient, saveStoreInfo } from "@/lib/firestore";
 import { getCurrentCounter, getNextMyCatalogId } from "@/lib/myCatalogIdGenerator";
 import { signOut } from "@/lib/auth";
 import { seedAll } from "@/lib/seedData";
@@ -26,6 +26,10 @@ export default function MenuPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [editingStore, setEditingStore] = useState(false);
+  const [storeForm, setStoreForm] = useState({ storeName: "", address: "", zipCode: "", phone: "", fax: "", personInCharge: "" });
+  const [storeSaving, setStoreSaving] = useState(false);
+  const [storeMsg, setStoreMsg] = useState("");
   const [signingOut, setSigningOut] = useState(false);
   const [seeding, setSeeding] = useState(false);
   const [seedMsg, setSeedMsg] = useState("");
@@ -39,11 +43,37 @@ export default function MenuPage() {
 
   useEffect(() => {
     if (!user) return;
-    getUserProfile(user.uid).then(setProfile);
+    getUserProfile(user.uid).then((p) => {
+      setProfile(p);
+      if (p) setStoreForm({ storeName: p.storeName ?? "", address: p.address ?? "", zipCode: p.zipCode ?? "", phone: p.phone ?? "", fax: p.fax ?? "", personInCharge: p.personInCharge ?? "" });
+    });
     getGeneralSettings(user.uid).then((s) => setPriceMode(s?.priceMode));
     getPendingIngredients(user.uid).then((items) => setPendingCount(items.length));
     getCurrentCounter(user.uid).then(setCatalogCounter);
   }, [user]);
+
+  const handleStoreSave = async () => {
+    if (!user || !storeForm.storeName.trim()) return;
+    setStoreSaving(true);
+    setStoreMsg("");
+    try {
+      await saveStoreInfo(user.uid, {
+        storeName: storeForm.storeName.trim(),
+        address: storeForm.address.trim() || undefined,
+        zipCode: storeForm.zipCode.trim() || undefined,
+        phone: storeForm.phone.trim() || undefined,
+        fax: storeForm.fax.trim() || undefined,
+        personInCharge: storeForm.personInCharge.trim() || undefined,
+      });
+      setProfile((prev) => prev ? { ...prev, ...storeForm } : prev);
+      setStoreMsg("✅ 保存しました");
+      setEditingStore(false);
+    } catch {
+      setStoreMsg("❌ 保存に失敗しました");
+    } finally {
+      setStoreSaving(false);
+    }
+  };
 
   const handleBulkAssign = async () => {
     if (!user) return;
@@ -187,28 +217,85 @@ export default function MenuPage() {
         <h1 className="text-xl font-bold text-text">メニュー</h1>
 
         {/* 店舗情報 */}
-        <div className="bg-white rounded-2xl shadow-sm p-4 space-y-2.5">
-          <p className="text-sm text-sub-text font-medium">店舗情報</p>
-          <dl className="space-y-2">
-            {profile?.storeName && (
-              <div className="flex justify-between">
-                <dt className="text-sm text-sub-text">店舗名</dt>
-                <dd className="font-semibold text-text">{profile.storeName}</dd>
-              </div>
+        <div className="bg-white rounded-2xl shadow-sm p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <p className="text-sm text-sub-text font-medium">店舗情報</p>
+            {!editingStore && (
+              <button
+                type="button"
+                onClick={() => { setEditingStore(true); setStoreMsg(""); }}
+                className="text-xs font-semibold px-3 py-1.5 rounded-lg border"
+                style={{ color: "#E85D2C", borderColor: "#E85D2C" }}
+              >
+                編集
+              </button>
             )}
-            {profile?.companyName && (
-              <div className="flex justify-between">
-                <dt className="text-sm text-sub-text">会社名</dt>
-                <dd className="font-semibold text-text">{profile.companyName}</dd>
+          </div>
+
+          {editingStore ? (
+            <div className="space-y-3">
+              {[
+                { key: "storeName", label: "店舗名 *", placeholder: "例: 居酒屋まるごと" },
+                { key: "zipCode", label: "郵便番号", placeholder: "例: 150-0001" },
+                { key: "address", label: "住所 (納品場所)", placeholder: "例: 東京都渋谷区..." },
+                { key: "phone", label: "電話番号", placeholder: "例: 03-1234-5678" },
+                { key: "fax", label: "FAX番号", placeholder: "例: 03-1234-5679" },
+                { key: "personInCharge", label: "担当者名", placeholder: "例: 山田 太郎" },
+              ].map(({ key, label, placeholder }) => (
+                <div key={key}>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">{label}</label>
+                  <input
+                    type="text"
+                    value={storeForm[key as keyof typeof storeForm]}
+                    onChange={(e) => setStoreForm((f) => ({ ...f, [key]: e.target.value }))}
+                    placeholder={placeholder}
+                    className="w-full rounded-xl border border-gray-200 px-4 py-3 text-[16px] outline-none focus:ring-2 focus:ring-primary"
+                  />
+                </div>
+              ))}
+              {storeMsg && (
+                <p className={`text-xs text-center ${storeMsg.startsWith("❌") ? "text-red-500" : "text-green-600"}`}>{storeMsg}</p>
+              )}
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => { setEditingStore(false); setStoreMsg(""); }}
+                  className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50"
+                >
+                  キャンセル
+                </button>
+                <button
+                  type="button"
+                  onClick={handleStoreSave}
+                  disabled={storeSaving || !storeForm.storeName.trim()}
+                  className="flex-1 py-2.5 rounded-xl text-sm font-bold text-white disabled:opacity-40"
+                  style={{ backgroundColor: "#E85D2C" }}
+                >
+                  {storeSaving ? "保存中..." : "保存"}
+                </button>
               </div>
-            )}
-            {profile?.email && (
-              <div className="flex justify-between">
-                <dt className="text-sm text-sub-text">メールアドレス</dt>
-                <dd className="text-sm font-medium text-text">{profile.email}</dd>
-              </div>
-            )}
-          </dl>
+            </div>
+          ) : (
+            <dl className="space-y-2">
+              {[
+                { label: "店舗名", value: profile?.storeName },
+                { label: "住所", value: profile?.address },
+                { label: "郵便番号", value: profile?.zipCode },
+                { label: "電話番号", value: profile?.phone },
+                { label: "FAX番号", value: profile?.fax },
+                { label: "担当者名", value: profile?.personInCharge },
+                { label: "メールアドレス", value: profile?.email },
+              ].filter((r) => r.value).map((r) => (
+                <div key={r.label} className="flex justify-between gap-3">
+                  <dt className="text-xs text-sub-text shrink-0">{r.label}</dt>
+                  <dd className="text-sm font-medium text-text text-right break-all">{r.value}</dd>
+                </div>
+              ))}
+              {storeMsg && (
+                <p className="text-xs text-green-600 text-center">{storeMsg}</p>
+              )}
+            </dl>
+          )}
         </div>
 
         {/* デモデータ投入 */}

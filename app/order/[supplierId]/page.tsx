@@ -174,19 +174,21 @@ export default function OrderInputPage() {
 
         {/* フッター */}
         <div
-          className="fixed bottom-0 left-0 right-0 flex justify-center"
-          style={{ zIndex: 50 }}
+          className="fixed left-0 right-0 flex justify-center"
+          style={{ bottom: "calc(60px + env(safe-area-inset-bottom, 0px))", zIndex: 110 }}
         >
-          <div
-            className="w-full max-w-[480px] bg-white border-t border-gray-100 px-4 py-3 flex gap-3"
-            style={{ paddingBottom: "calc(12px + env(safe-area-inset-bottom, 0px))" }}
-          >
+          <div className="w-full max-w-[480px] bg-white border-t border-gray-100 px-4 py-3 flex gap-3">
             <button
               type="button"
-              onClick={() => saveDraftAndNavigate(`/order/${supplierId}`)}
+              onClick={() => {
+                sessionStorage.setItem(DRAFT_KEY, JSON.stringify({
+                  supplierId, supplierName, quantities, deliveryDate: "today", generalNote: "",
+                }));
+                router.push("/");
+              }}
               className="flex-1 py-3 rounded-xl border border-gray-300 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors"
             >
-              一時保存
+              一時保存して戻る
             </button>
             <button
               type="button"

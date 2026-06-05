@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
@@ -11,11 +11,19 @@ type SupplierSummary = {
   count: number;
 };
 
+function normalize(s: string) {
+  return s
+    .toLowerCase()
+    .replace(/[ァ-ン]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0x60))
+    .replace(/[ぁ-ん]/g, (c) => c);
+}
+
 export default function OrderPage() {
   const { user } = useAuth();
   const router = useRouter();
   const [suppliers, setSuppliers] = useState<SupplierSummary[]>([]);
   const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
 
   useEffect(() => {
     if (!user) return;
@@ -35,9 +43,15 @@ export default function OrderPage() {
       .finally(() => setLoading(false));
   }, [user]);
 
+  const filtered = useMemo(() => {
+    if (!search.trim()) return suppliers;
+    const q = normalize(search.trim());
+    return suppliers.filter((s) => normalize(s.name).includes(q));
+  }, [suppliers, search]);
+
   return (
     <main className="min-h-screen bg-gray-50 flex justify-center">
-      <div className="w-full max-w-[480px] px-4 py-6 space-y-4" style={{ paddingBottom: 80 }}>
+      <div className="w-full max-w-[480px] px-4 py-6 space-y-4" style={{ paddingBottom: 100 }}>
         <div className="flex items-center gap-3">
           <button
             onClick={() => router.back()}
@@ -51,6 +65,38 @@ export default function OrderPage() {
           <h1 className="text-xl font-bold">発注先を選択</h1>
         </div>
 
+        {/* 発注履歴カード */}
+        <Link
+          href="/order/history"
+          className="block bg-white rounded-xl shadow-sm p-4 hover:bg-orange-50 transition-colors"
+        >
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="font-bold text-gray-900">📋 発注履歴から再発注</p>
+              <p className="text-xs text-gray-400 mt-0.5">過去の発注内容を再利用</p>
+            </div>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/icons/icon-arrow-right.svg" alt="" width={16} height={16}
+              style={{ filter: "brightness(0) opacity(0.3)" }} />
+          </div>
+        </Link>
+
+        <div className="h-px bg-gray-200" />
+
+        {/* 検索 */}
+        <div className="relative">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/icons/icon-search.svg" alt="" width={16} height={16}
+            className="absolute left-3 top-1/2 -translate-y-1/2 opacity-40" />
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="取引先名で検索..."
+            className="w-full rounded-xl border border-gray-200 pl-9 pr-4 py-3 text-[16px] outline-none focus:ring-2 focus:ring-primary bg-white"
+          />
+        </div>
+
         {loading ? (
           <div className="space-y-3">
             {[1, 2, 3].map((i) => (
@@ -61,28 +107,34 @@ export default function OrderPage() {
           <div className="text-center py-12 space-y-3">
             <p className="text-gray-500 text-sm">取引先が設定された食材がありません</p>
             <Link href="/search" className="text-primary underline text-sm">
-              食材に仕入先を設定する
+              食材に仕入先を設定する →
             </Link>
           </div>
         ) : (
           <div className="space-y-3">
-            {suppliers.map((s) => (
-              <Link
-                key={s.name}
-                href={`/order/${encodeURIComponent(s.name)}`}
-                className="block bg-white rounded-xl shadow-sm p-4 hover:bg-orange-50 transition-colors"
-              >
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="font-bold text-gray-900">{s.name}</p>
-                    <p className="text-xs text-gray-400 mt-0.5">食材: {s.count}件</p>
+            {filtered.length === 0 ? (
+              <p className="text-center text-sm text-gray-400 py-8">
+                「{search}」に一致する取引先がありません
+              </p>
+            ) : (
+              filtered.map((s) => (
+                <Link
+                  key={s.name}
+                  href={`/order/${encodeURIComponent(s.name)}`}
+                  className="block bg-white rounded-xl shadow-sm p-4 hover:bg-orange-50 transition-colors"
+                >
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="font-bold text-gray-900">{s.name}</p>
+                      <p className="text-xs text-gray-400 mt-0.5">食材: {s.count}件</p>
+                    </div>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src="/icons/icon-arrow-right.svg" alt="" width={16} height={16}
+                      style={{ filter: "brightness(0) opacity(0.3)" }} />
                   </div>
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src="/icons/icon-arrow-right.svg" alt="" width={16} height={16}
-                    style={{ filter: "brightness(0) opacity(0.3)" }} />
-                </div>
-              </Link>
-            ))}
+                </Link>
+              ))
+            )}
           </div>
         )}
       </div>

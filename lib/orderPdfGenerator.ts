@@ -1,8 +1,17 @@
 import type { OrderItem } from "@/types";
 
+export type StoreInfoForOrder = {
+  storeName: string;
+  address?: string;
+  zipCode?: string;
+  phone?: string;
+  fax?: string;
+  personInCharge?: string;
+};
+
 type OrderDocParams = {
   supplierName: string;
-  storeName: string;
+  storeInfo: StoreInfoForOrder;
   items: OrderItem[];
   deliveryDate: string;
   generalNote: string;
@@ -33,6 +42,7 @@ export function generateOrderHtml(params: OrderDocParams): string {
   const now = new Date();
   const nowStr = `${now.getFullYear()}/${pad(now.getMonth() + 1)}/${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
   const deliveryStr = formatDeliveryDate(params.deliveryDate);
+  const { storeInfo } = params;
 
   const rows = params.items
     .map(
@@ -47,6 +57,15 @@ export function generateOrderHtml(params: OrderDocParams): string {
     )
     .join("");
 
+  const storeLines = [
+    storeInfo.storeName,
+    storeInfo.zipCode ? `〒${storeInfo.zipCode}` : "",
+    storeInfo.address ?? "",
+    storeInfo.phone ? `TEL: ${storeInfo.phone}` : "",
+    storeInfo.fax ? `FAX: ${storeInfo.fax}` : "",
+    storeInfo.personInCharge ? `担当: ${storeInfo.personInCharge}` : "",
+  ].filter(Boolean).map(l => `<p>${l}</p>`).join("");
+
   return `<!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -57,9 +76,13 @@ export function generateOrderHtml(params: OrderDocParams): string {
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: "Hiragino Kaku Gothic ProN", "Noto Sans JP", sans-serif; font-size: 13px; color: #111; padding: 24px; max-width: 680px; margin: 0 auto; }
   h1 { font-size: 22px; font-weight: bold; text-align: center; margin-bottom: 20px; border-bottom: 2px solid #111; padding-bottom: 8px; }
-  .meta { margin-bottom: 16px; }
-  .meta p { margin: 4px 0; }
-  .box { border: 1px solid #333; padding: 8px 12px; margin: 12px 0; font-size: 14px; font-weight: bold; }
+  .header-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+  .header-block { border: 1px solid #ccc; padding: 10px 12px; }
+  .header-block .label { font-size: 11px; color: #666; margin-bottom: 4px; }
+  .header-block p { margin: 2px 0; font-size: 13px; }
+  .header-block .main { font-size: 16px; font-weight: bold; }
+  .meta-row { display: flex; gap: 16px; margin-bottom: 8px; font-size: 12px; color: #555; }
+  .box { border: 2px solid #333; padding: 8px 12px; margin: 12px 0; font-size: 14px; font-weight: bold; }
   table { width: 100%; border-collapse: collapse; margin-top: 12px; }
   th, td { border: 1px solid #555; padding: 7px 8px; text-align: left; font-size: 13px; }
   th { background: #f0f0f0; font-weight: bold; }
@@ -75,10 +98,18 @@ export function generateOrderHtml(params: OrderDocParams): string {
 </head>
 <body>
 <h1>発 注 書</h1>
-<div class="meta">
-  <p>作成日時: ${nowStr}</p>
-  <p>発注元: ${params.storeName}</p>
-  <p>発注先: <strong>${params.supplierName}</strong></p>
+<div class="meta-row">
+  <span>作成日時: ${nowStr}</span>
+</div>
+<div class="header-grid">
+  <div class="header-block">
+    <div class="label">発注先</div>
+    <p class="main">${params.supplierName} 御中</p>
+  </div>
+  <div class="header-block">
+    <div class="label">発注元</div>
+    ${storeLines}
+  </div>
 </div>
 <div class="box">納品希望日: ${deliveryStr}</div>
 <table>
@@ -126,7 +157,7 @@ export function openOrderPrintWindow(params: OrderDocParams): void {
 export function generateLineText(params: OrderDocParams): string {
   const deliveryStr = formatDeliveryDate(params.deliveryDate);
   const lines = [
-    `【発注書】${params.storeName}`,
+    `【発注書】${params.storeInfo.storeName}`,
     `発注先: ${params.supplierName}`,
     `納品希望日: ${deliveryStr}`,
     "",
@@ -137,12 +168,15 @@ export function generateLineText(params: OrderDocParams): string {
   if (params.generalNote) {
     lines.push("", `備考: ${params.generalNote}`);
   }
+  if (params.storeInfo.personInCharge) {
+    lines.push("", `担当: ${params.storeInfo.personInCharge}`);
+  }
   return lines.join("\n");
 }
 
 export function generateMailtoUrl(params: OrderDocParams): string {
   const deliveryStr = formatDeliveryDate(params.deliveryDate);
-  const subject = encodeURIComponent(`発注書 ${params.storeName} → ${params.supplierName}`);
+  const subject = encodeURIComponent(`発注書 ${params.storeInfo.storeName} → ${params.supplierName}`);
   const body = encodeURIComponent(generateLineText(params) + `\n\n納品希望日: ${deliveryStr}`);
   return `mailto:?subject=${subject}&body=${body}`;
 }

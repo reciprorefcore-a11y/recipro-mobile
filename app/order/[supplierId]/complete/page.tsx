@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
 import { getIngredients, getUserProfile, saveOrder } from "@/lib/firestore";
 import { openOrderPrintWindow, generateLineText, generateMailtoUrl } from "@/lib/orderPdfGenerator";
+import type { StoreInfoForOrder } from "@/lib/orderPdfGenerator";
 import type { OrderDraft } from "../page";
 import type { OrderItem } from "@/types";
 
@@ -20,7 +21,7 @@ export default function OrderCompletePage() {
   const [items, setItems] = useState<OrderItem[]>([]);
   const [deliveryDate, setDeliveryDate] = useState("today");
   const [generalNote, setGeneralNote] = useState("");
-  const [storeName, setStoreName] = useState("店舗");
+  const [storeInfo, setStoreInfo] = useState<StoreInfoForOrder>({ storeName: "店舗" });
   const [orderId, setOrderId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
@@ -47,7 +48,16 @@ export default function OrderCompletePage() {
       getIngredients(user.uid),
       getUserProfile(user.uid),
     ]).then(([all, profile]) => {
-      if (profile?.storeName) setStoreName(profile.storeName);
+      if (profile) {
+        setStoreInfo({
+          storeName: profile.storeName || "店舗",
+          address: profile.address,
+          zipCode: profile.zipCode,
+          phone: profile.phone,
+          fax: profile.fax,
+          personInCharge: profile.personInCharge,
+        });
+      }
 
       const orderItems: OrderItem[] = [];
       for (const [id, qty] of Object.entries(quantities)) {
@@ -79,7 +89,7 @@ export default function OrderCompletePage() {
     });
   }, [user, supplierId, supplierName, router]);
 
-  const pdfParams = { supplierName, storeName, items, deliveryDate, generalNote };
+  const pdfParams = { supplierName, storeInfo, items, deliveryDate, generalNote };
 
   const handlePdf = () => openOrderPrintWindow(pdfParams);
 
