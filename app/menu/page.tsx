@@ -4,14 +4,10 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/hooks/useAuth";
-import { getUserProfile, getGeneralSettings, savePriceMode, getPendingIngredients, getIngredients, updateIngredient, saveStoreInfo } from "@/lib/firestore";
+import { getUserProfile, getIngredients, updateIngredient } from "@/lib/firestore";
 import { getCurrentCounter, getNextMyCatalogId } from "@/lib/myCatalogIdGenerator";
 import { signOut } from "@/lib/auth";
-import { seedAll } from "@/lib/seedData";
-import { IconEditDocument } from "@/components/icons";
-import PriceModeModal from "@/components/PriceModeModal";
-import CsvDownloadButton from "@/components/CsvDownloadButton";
-import type { UserProfile, PriceMode } from "@/types";
+import type { UserProfile } from "@/types";
 
 type ImportPhase =
   | { name: "idle" }
@@ -26,16 +22,7 @@ export default function MenuPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [profile, setProfile] = useState<UserProfile | null>(null);
-  const [editingStore, setEditingStore] = useState(false);
-  const [storeForm, setStoreForm] = useState({ storeName: "", address: "", zipCode: "", phone: "", fax: "", personInCharge: "" });
-  const [storeSaving, setStoreSaving] = useState(false);
-  const [storeMsg, setStoreMsg] = useState("");
   const [signingOut, setSigningOut] = useState(false);
-  const [seeding, setSeeding] = useState(false);
-  const [seedMsg, setSeedMsg] = useState("");
-  const [priceMode, setPriceMode] = useState<PriceMode | undefined>(undefined);
-  const [priceModeOpen, setPriceModeOpen] = useState(false);
-  const [pendingCount, setPendingCount] = useState(0);
   const [catalogCounter, setCatalogCounter] = useState<number | null>(null);
   const [bulkAssigning, setBulkAssigning] = useState(false);
   const [bulkMsg, setBulkMsg] = useState("");
@@ -43,39 +30,9 @@ export default function MenuPage() {
 
   useEffect(() => {
     if (!user) return;
-    getUserProfile(user.uid).then((p) => {
-      setProfile(p);
-      if (p) setStoreForm({ storeName: p.storeName ?? "", address: p.address ?? "", zipCode: p.zipCode ?? "", phone: p.phone ?? "", fax: p.fax ?? "", personInCharge: p.personInCharge ?? "" });
-    });
-    getGeneralSettings(user.uid).then((s) => setPriceMode(s?.priceMode));
-    getPendingIngredients(user.uid).then((items) => setPendingCount(items.length));
+    getUserProfile(user.uid).then((p) => setProfile(p));
     getCurrentCounter(user.uid).then(setCatalogCounter);
   }, [user]);
-
-  const handleStoreSave = async () => {
-    if (!user || !storeForm.storeName.trim()) return;
-    setStoreSaving(true);
-    setStoreMsg("");
-    try {
-      await saveStoreInfo(user.uid, {
-        storeName: storeForm.storeName.trim(),
-        address: storeForm.address.trim() || undefined,
-        zipCode: storeForm.zipCode.trim() || undefined,
-        phone: storeForm.phone.trim() || undefined,
-        fax: storeForm.fax.trim() || undefined,
-        personInCharge: storeForm.personInCharge.trim() || undefined,
-      });
-      setProfile((prev) => prev ? { ...prev, ...storeForm } : prev);
-      setStoreMsg("✅ 保存しました");
-      setEditingStore(false);
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      console.error("[saveStoreInfo]", msg, err);
-      setStoreMsg(`❌ 保存に失敗しました: ${msg}`);
-    } finally {
-      setStoreSaving(false);
-    }
-  };
 
   const handleBulkAssign = async () => {
     if (!user) return;
@@ -104,7 +61,6 @@ export default function MenuPage() {
     }
   };
 
-  // ファイル選択 → プレビュー取得
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     e.target.value = "";
@@ -113,7 +69,7 @@ export default function MenuPage() {
     setImportPhase({ name: "previewing", file, total: 0, suppliers: [], supplierCount: 0 });
 
     try {
-      const token = await user.getIdToken(/* forceRefresh */ true);
+      const token = await user.getIdToken(true);
       const formData = new FormData();
       formData.append("file", file);
       formData.append("preview", "true");
@@ -141,14 +97,13 @@ export default function MenuPage() {
     }
   };
 
-  // 確認後 → 実際に取り込み実行
   const handleImportConfirm = async () => {
     if (importPhase.name !== "previewing" || !user) return;
     const file = importPhase.file;
     setImportPhase({ name: "importing" });
 
     try {
-      const token = await user.getIdToken(/* forceRefresh */ true);
+      const token = await user.getIdToken(true);
       const formData = new FormData();
       formData.append("file", file);
 
@@ -181,13 +136,6 @@ export default function MenuPage() {
     }
   };
 
-  const handlePriceModeSelect = async (mode: PriceMode) => {
-    if (!user) return;
-    await savePriceMode(user.uid, mode).catch(console.error);
-    setPriceMode(mode);
-    setPriceModeOpen(false);
-  };
-
   const handleSignOut = async () => {
     setSigningOut(true);
     try {
@@ -198,187 +146,50 @@ export default function MenuPage() {
     }
   };
 
-  const handleSeedAll = async () => {
-    if (!user) return;
-    setSeeding(true);
-    setSeedMsg("");
-    try {
-      const { ingredients, products } = await seedAll(user.uid);
-      setSeedMsg(`✅ 食材 ${ingredients}件・商品 ${products}件を投入しました`);
-    } catch (err: unknown) {
-      const e = err as { message?: string };
-      setSeedMsg(`❌ ${e.message ?? "投入に失敗しました"}`);
-    } finally {
-      setSeeding(false);
-    }
-  };
-
   return (
-    <main className="min-h-screen bg-bg flex justify-center">
+    <main className="min-h-screen bg-gray-50 flex justify-center">
       <div className="w-full max-w-[480px] px-4 py-6 space-y-4">
-        <h1 className="text-xl font-bold text-text">メニュー</h1>
+        <h1 className="text-xl font-bold text-gray-900">メニュー</h1>
 
-        {/* 店舗情報 */}
-        <div className="bg-white rounded-2xl shadow-sm p-4 space-y-3">
-          <div className="flex items-center justify-between">
-            <p className="text-sm text-sub-text font-medium">店舗情報</p>
-            {!editingStore && (
-              <button
-                type="button"
-                onClick={() => { setEditingStore(true); setStoreMsg(""); }}
-                className="text-xs font-semibold px-3 py-1.5 rounded-lg border"
-                style={{ color: "#E85D2C", borderColor: "#E85D2C" }}
-              >
-                編集
-              </button>
-            )}
-          </div>
-
-          {editingStore ? (
-            <div className="space-y-3">
-              {[
-                { key: "storeName", label: "店舗名 *", placeholder: "例: 居酒屋まるごと" },
-                { key: "zipCode", label: "郵便番号", placeholder: "例: 150-0001" },
-                { key: "address", label: "住所 (納品場所)", placeholder: "例: 東京都渋谷区..." },
-                { key: "phone", label: "電話番号", placeholder: "例: 03-1234-5678" },
-                { key: "fax", label: "FAX番号", placeholder: "例: 03-1234-5679" },
-                { key: "personInCharge", label: "担当者名", placeholder: "例: 山田 太郎" },
-              ].map(({ key, label, placeholder }) => (
-                <div key={key}>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">{label}</label>
-                  <input
-                    type="text"
-                    value={storeForm[key as keyof typeof storeForm]}
-                    onChange={(e) => setStoreForm((f) => ({ ...f, [key]: e.target.value }))}
-                    placeholder={placeholder}
-                    className="w-full rounded-xl border border-gray-200 px-4 py-3 text-[16px] outline-none focus:ring-2 focus:ring-primary"
-                  />
-                </div>
-              ))}
-              {storeMsg && (
-                <p className={`text-xs text-center ${storeMsg.startsWith("❌") ? "text-red-500" : "text-green-600"}`}>{storeMsg}</p>
-              )}
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => { setEditingStore(false); setStoreMsg(""); }}
-                  className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50"
-                >
-                  キャンセル
-                </button>
-                <button
-                  type="button"
-                  onClick={handleStoreSave}
-                  disabled={storeSaving || !storeForm.storeName.trim()}
-                  className="flex-1 py-2.5 rounded-xl text-sm font-bold text-white disabled:opacity-40"
-                  style={{ backgroundColor: "#E85D2C" }}
-                >
-                  {storeSaving ? "保存中..." : "保存"}
-                </button>
-              </div>
+        {/* 店舗情報サマリー */}
+        {profile && (
+          <div className="bg-white rounded-2xl shadow-sm px-4 py-3 flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-900">{profile.storeName}</p>
+              {profile.email && <p className="text-xs text-gray-400 mt-0.5">{profile.email}</p>}
             </div>
-          ) : (
-            <dl className="space-y-2">
-              {[
-                { label: "店舗名", value: profile?.storeName },
-                { label: "住所", value: profile?.address },
-                { label: "郵便番号", value: profile?.zipCode },
-                { label: "電話番号", value: profile?.phone },
-                { label: "FAX番号", value: profile?.fax },
-                { label: "担当者名", value: profile?.personInCharge },
-                { label: "メールアドレス", value: profile?.email },
-              ].filter((r) => r.value).map((r) => (
-                <div key={r.label} className="flex justify-between gap-3">
-                  <dt className="text-xs text-sub-text shrink-0">{r.label}</dt>
-                  <dd className="text-sm font-medium text-text text-right break-all">{r.value}</dd>
-                </div>
-              ))}
-              {storeMsg && (
-                <p className="text-xs text-green-600 text-center">{storeMsg}</p>
-              )}
-            </dl>
-          )}
-        </div>
-
-        {/* デモデータ投入 */}
-        <div className="bg-white rounded-2xl shadow-sm p-4 space-y-2">
-          <p className="text-sm text-sub-text font-medium">デモデータ</p>
-          <p className="text-xs text-muted">
-            食材・商品のサンプルデータを投入します。既存データへの追記になります。
-          </p>
-          <button
-            onClick={handleSeedAll}
-            disabled={seeding}
-            className="w-full py-2.5 text-sm font-medium text-gray-600 border border-dashed border-gray-300 rounded-xl hover:bg-gray-50 disabled:opacity-50 transition-colors"
-          >
-            {seeding ? "投入中..." : "🌱 デモデータを投入(初回のみ)"}
-          </button>
-          {seedMsg && (
-            <p className={`text-xs text-center ${seedMsg.startsWith("❌") ? "text-red-500" : "text-gray-500"}`}>
-              {seedMsg}
-            </p>
-          )}
-        </div>
-
-        {/* 価格設定 */}
-        <div className="bg-white rounded-2xl shadow-sm p-4 space-y-2">
-          <p className="text-sm text-sub-text font-medium">価格設定</p>
-          <div className="flex items-center justify-between">
-            <p className="text-sm text-text">
-              現在:{" "}
-              {priceMode === "taxIncluded"
-                ? "税込"
-                : priceMode === "taxExcluded"
-                ? "税別"
-                : "未設定"}
-            </p>
-            <button
-              onClick={() => setPriceModeOpen(true)}
-              className="text-sm font-semibold px-3 py-1.5 rounded-lg border"
+            <Link
+              href="/menu/store-info"
+              className="text-xs font-semibold px-3 py-1.5 rounded-lg border"
               style={{ color: "#E85D2C", borderColor: "#E85D2C" }}
             >
-              変更する
-            </button>
+              編集
+            </Link>
           </div>
-        </div>
-
-        {/* レシプロ連携 */}
-        <div className="bg-white rounded-2xl shadow-sm p-4 space-y-2">
-          <p className="text-sm text-sub-text font-medium">レシプロ連携</p>
-          <p className="text-xs text-muted">
-            食材マスタをレシプロ入力シート互換のCSVでエクスポートします。
-          </p>
-          <CsvDownloadButton />
-        </div>
+        )}
 
         {/* マイカタログID管理 */}
         <div className="bg-white rounded-2xl shadow-sm p-4 space-y-3">
-          <p className="text-sm text-sub-text font-medium">マイカタログID管理</p>
-          <div>
-            <p className="text-xs text-sub-text">次に発行されるID</p>
-            <p className="text-lg font-bold text-text">
-              {catalogCounter !== null ? catalogCounter.toLocaleString() : "—"}
-            </p>
+          <p className="text-sm font-medium text-gray-500">マイカタログID管理</p>
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs text-gray-400">次に発行されるID</p>
+              <p className="text-lg font-bold text-gray-900">
+                {catalogCounter !== null ? catalogCounter.toLocaleString() : "—"}
+              </p>
+            </div>
+            <button
+              onClick={handleBulkAssign}
+              disabled={bulkAssigning}
+              className="text-xs font-semibold px-3 py-1.5 rounded-lg border disabled:opacity-50"
+              style={{ color: "#E85D2C", borderColor: "#E85D2C" }}
+            >
+              {bulkAssigning ? "採番中..." : "一括採番"}
+            </button>
           </div>
-          <p className="text-xs text-muted">
+          <p className="text-xs text-gray-400">
             モバイル版が発行するIDは 10000 以上です。レシプロ本体のIDとは重複しません。
           </p>
-        </div>
-
-        {/* マイカタログID 一括採番 */}
-        <div className="bg-white rounded-2xl shadow-sm p-4 space-y-2">
-          <p className="text-sm text-sub-text font-medium">マイカタログID 一括採番</p>
-          <p className="text-xs text-muted">
-            マイカタログIDが未設定の食材に、自動でIDを発行します。
-          </p>
-          <button
-            onClick={handleBulkAssign}
-            disabled={bulkAssigning}
-            className="w-full py-2.5 text-sm font-medium border rounded-xl transition-colors hover:opacity-80 disabled:opacity-50"
-            style={{ color: "#E85D2C", borderColor: "#E85D2C" }}
-          >
-            {bulkAssigning ? "採番中..." : "未設定食材に一括採番"}
-          </button>
           {bulkMsg && (
             <p className={`text-xs text-center ${bulkMsg.startsWith("❌") ? "text-red-500" : "text-gray-500"}`}>
               {bulkMsg}
@@ -388,11 +199,11 @@ export default function MenuPage() {
 
         {/* レシプロから食材マスタを取り込む */}
         <div className="bg-white rounded-2xl shadow-sm p-4 space-y-3">
-          <p className="text-sm text-sub-text font-medium">レシプロから食材マスタを取り込む</p>
+          <p className="text-sm font-medium text-gray-500">レシプロから食材マスタを取り込む</p>
 
           {importPhase.name === "idle" && (
             <>
-              <p className="text-xs text-muted">
+              <p className="text-xs text-gray-400">
                 レシプロの入力シート(.xlsx)またはCSVをアップロードして食材マスタを取り込みます。
               </p>
               <label className="block cursor-pointer">
@@ -431,20 +242,20 @@ export default function MenuPage() {
                 <p className="text-sm font-bold text-gray-900">取り込み確認</p>
                 <div className="space-y-1.5">
                   <div className="flex justify-between text-sm">
-                    <span className="text-sub-text">食材データ</span>
-                    <span className="font-bold text-text">{importPhase.total.toLocaleString()}件</span>
+                    <span className="text-gray-500">食材データ</span>
+                    <span className="font-bold text-gray-900">{importPhase.total.toLocaleString()}件</span>
                   </div>
                   <div className="flex justify-between text-sm">
-                    <span className="text-sub-text">取引先</span>
-                    <span className="font-bold text-text">{importPhase.supplierCount}社</span>
+                    <span className="text-gray-500">取引先</span>
+                    <span className="font-bold text-gray-900">{importPhase.supplierCount}社</span>
                   </div>
                 </div>
                 {importPhase.suppliers.length > 0 && (
                   <div className="space-y-1">
-                    <p className="text-xs text-sub-text font-medium">取引先一覧:</p>
+                    <p className="text-xs text-gray-500 font-medium">取引先一覧:</p>
                     <ul className="space-y-0.5">
                       {importPhase.suppliers.slice(0, 8).map((s) => (
-                        <li key={s} className="text-xs text-gray-600">・{s}</li>
+                        <li key={s} className="text-xs text-gray-500">・{s}</li>
                       ))}
                       {importPhase.suppliers.length > 8 && (
                         <li className="text-xs text-gray-400">他 {importPhase.suppliers.length - 8}社</li>
@@ -456,13 +267,13 @@ export default function MenuPage() {
               <div className="flex gap-2">
                 <button
                   onClick={() => setImportPhase({ name: "idle" })}
-                  className="flex-1 py-2.5 text-sm font-medium border border-gray-200 rounded-xl text-gray-600 hover:bg-gray-50 transition-colors"
+                  className="flex-1 py-2.5 text-sm font-medium border border-gray-200 rounded-xl text-gray-600 hover:bg-gray-50"
                 >
                   キャンセル
                 </button>
                 <button
                   onClick={handleImportConfirm}
-                  className="flex-1 py-2.5 text-sm font-bold text-white rounded-xl transition-colors hover:opacity-90"
+                  className="flex-1 py-2.5 text-sm font-bold text-white rounded-xl"
                   style={{ backgroundColor: "#E85D2C" }}
                 >
                   取り込みを実行
@@ -480,9 +291,9 @@ export default function MenuPage() {
 
           {importPhase.name === "done" && (
             <>
-              <div className="bg-green-50 rounded-xl p-4 space-y-3">
+              <div className="bg-green-50 rounded-xl p-4 space-y-2">
                 <p className="text-sm font-bold text-green-900">✅ 取り込み完了</p>
-                <div className="space-y-1.5">
+                <div className="space-y-1">
                   <div className="flex justify-between text-sm">
                     <span className="text-green-700">新規追加</span>
                     <span className="font-bold text-green-800">{importPhase.added.toLocaleString()}件</span>
@@ -494,10 +305,10 @@ export default function MenuPage() {
                   {importPhase.skipped > 0 && (
                     <div className="flex justify-between text-sm">
                       <span className="text-gray-500">スキップ</span>
-                      <span className="font-medium text-gray-600">{importPhase.skipped}件</span>
+                      <span className="text-gray-600">{importPhase.skipped}件</span>
                     </div>
                   )}
-                  <div className="border-t border-green-100 pt-1.5 flex justify-between text-sm">
+                  <div className="border-t border-green-100 pt-1 flex justify-between text-sm">
                     <span className="text-green-700">取引先登録</span>
                     <span className="font-bold text-green-800">
                       {importPhase.supplierCount}社
@@ -505,20 +316,10 @@ export default function MenuPage() {
                     </span>
                   </div>
                 </div>
-                {importPhase.suppliers.length > 0 && (
-                  <div className="space-y-0.5">
-                    {importPhase.suppliers.slice(0, 6).map((s) => (
-                      <p key={s} className="text-xs text-green-700">・{s}</p>
-                    ))}
-                    {importPhase.suppliers.length > 6 && (
-                      <p className="text-xs text-green-600">他 {importPhase.suppliers.length - 6}社</p>
-                    )}
-                  </div>
-                )}
               </div>
               <button
                 onClick={() => setImportPhase({ name: "idle" })}
-                className="w-full py-2.5 text-sm font-medium border rounded-xl transition-colors hover:bg-gray-50"
+                className="w-full py-2.5 text-sm font-medium border rounded-xl"
                 style={{ color: "#E85D2C", borderColor: "#E85D2C" }}
               >
                 続けて取り込む
@@ -531,7 +332,7 @@ export default function MenuPage() {
               <p className="text-xs text-red-500 text-center">❌ {importPhase.message}</p>
               <button
                 onClick={() => setImportPhase({ name: "idle" })}
-                className="w-full py-2.5 text-sm font-medium border border-gray-200 rounded-xl text-gray-600 hover:bg-gray-50 transition-colors"
+                className="w-full py-2.5 text-sm font-medium border border-gray-200 rounded-xl text-gray-600"
               >
                 やり直す
               </button>
@@ -539,33 +340,11 @@ export default function MenuPage() {
           )}
         </div>
 
-        {/* リンク */}
+        {/* リンクリスト */}
         <div className="bg-white rounded-2xl shadow-sm divide-y divide-gray-100">
-          <Link
-            href="/products"
-            className="flex items-center justify-between px-4 py-3.5 hover:bg-gray-50 transition-colors"
-          >
-            <span className="flex items-center gap-2 text-sm font-medium text-text">
-              <IconEditDocument size={18} className="text-gray-500" />
-              商品マスタ管理
-            </span>
-            <span className="text-muted text-lg">›</span>
-          </Link>
-          <Link
-            href="/new-ingredients"
-            className="flex items-center justify-between px-4 py-3.5 hover:bg-gray-50 transition-colors"
-          >
-            <span className="text-sm font-medium text-text">
-              新規食材リスト
-              {pendingCount > 0 && (
-                <span className="ml-2 text-xs font-bold text-white bg-amber-500 px-2 py-0.5 rounded-full">
-                  {pendingCount}件
-                </span>
-              )}
-            </span>
-            <span className="text-muted text-lg">›</span>
-          </Link>
           {[
+            { label: "店舗情報", href: "/menu/store-info" },
+            { label: "取引先マスタ", href: "/menu/suppliers" },
             { label: "利用規約", href: "/terms" },
             { label: "プライバシーポリシー", href: "/privacy" },
             { label: "お問い合わせ", href: "/contact" },
@@ -575,8 +354,8 @@ export default function MenuPage() {
               href={item.href}
               className="flex items-center justify-between px-4 py-3.5 hover:bg-gray-50 transition-colors"
             >
-              <span className="text-sm font-medium text-text">{item.label}</span>
-              <span className="text-muted text-lg">›</span>
+              <span className="text-sm font-medium text-gray-800">{item.label}</span>
+              <span className="text-gray-400 text-lg">›</span>
             </Link>
           ))}
         </div>
@@ -585,19 +364,14 @@ export default function MenuPage() {
         <button
           onClick={handleSignOut}
           disabled={signingOut}
-          className="w-full py-3.5 rounded-2xl bg-white shadow-sm text-danger font-semibold text-base hover:bg-red-50 disabled:opacity-50 transition-colors"
+          className="w-full py-3.5 rounded-2xl bg-white shadow-sm font-semibold text-base hover:bg-red-50 disabled:opacity-50 transition-colors"
+          style={{ color: "#D93025" }}
         >
           {signingOut ? "ログアウト中..." : "ログアウト"}
         </button>
 
-        <p className="text-center text-xs text-muted pt-2">Recipro v0.1.0</p>
+        <p className="text-center text-xs text-gray-400 pb-2">Recipro v0.1.0</p>
       </div>
-
-      <PriceModeModal
-        isOpen={priceModeOpen}
-        onClose={() => setPriceModeOpen(false)}
-        onSelect={handlePriceModeSelect}
-      />
     </main>
   );
 }

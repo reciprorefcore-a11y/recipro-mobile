@@ -7,6 +7,12 @@ export type Supplier = {
   companyId: string;
   name: string;
   nameKana?: string;
+  email?: string;
+  phone?: string;
+  fax?: string;
+  lineId?: string;
+  orderUrl?: string;
+  note?: string;
   usageCount: number;
   createdAt?: Timestamp;
   updatedAt?: Timestamp;

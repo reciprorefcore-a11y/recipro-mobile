@@ -554,6 +554,19 @@ export async function getSuppliers(companyId: string): Promise<Supplier[]> {
   return snap.docs.map((d) => ({ id: d.id, ...d.data() } as Supplier));
 }
 
+export async function updateSupplier(
+  companyId: string,
+  supplierId: string,
+  data: Partial<Pick<Supplier, "name" | "nameKana" | "email" | "phone" | "fax" | "lineId" | "orderUrl" | "note">>
+): Promise<void> {
+  const clean = Object.fromEntries(Object.entries(data).filter(([, v]) => v !== undefined));
+  await setDoc(
+    doc(db, "companies", companyId, "suppliers", supplierId),
+    { ...clean, updatedAt: serverTimestamp() },
+    { merge: true }
+  );
+}
+
 // ─── Orders ──────────────────────────────────────────────
 
 export async function saveOrder(
