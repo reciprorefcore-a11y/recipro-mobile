@@ -23,6 +23,11 @@ type PriceChangeItem = {
   pct: number;
 };
 
+type AvgStats = {
+  pct: number;
+  changedCount: number;
+};
+
 type OrderRankItem = {
   ingredientName: string;
   totalAmount: number;
@@ -39,6 +44,17 @@ function buildDisplayChanges(ingredients: Ingredient[]): PriceChangeItem[] {
   const rising = withPct.filter((i) => i.pct > 0).sort((a, b) => b.pct - a.pct).slice(0, 3);
   const falling = withPct.filter((i) => i.pct < 0).sort((a, b) => a.pct - b.pct).slice(0, 1);
   return [...rising, ...falling];
+}
+
+function buildAvgStats(ingredients: Ingredient[]): AvgStats | null {
+  const active = ingredients.filter(
+    (i) => i.isActive && i.oldPrice != null && i.oldPrice > 0
+  );
+  if (active.length === 0) return null;
+  const pcts = active.map((i) => ((i.currentPrice - i.oldPrice!) / i.oldPrice!) * 100);
+  const avg = pcts.reduce((s, p) => s + p, 0) / pcts.length;
+  const changedCount = pcts.filter((p) => Math.abs(p) > 0.01).length;
+  return { pct: avg, changedCount };
 }
 
 function buildMonthlyTopOrders(orders: Order[], ingredients: Ingredient[]): OrderRankItem[] {
@@ -76,6 +92,7 @@ export default function HomePage() {
   const router = useRouter();
   const [storeName, setStoreName] = useState("");
   const [displayChanges, setDisplayChanges] = useState<PriceChangeItem[]>([]);
+  const [avgStats, setAvgStats] = useState<AvgStats | null>(null);
   const [orderTop3, setOrderTop3] = useState<OrderRankItem[]>([]);
   const [completedSteps, setCompletedSteps] = useState<CompletedSteps | null>(null);
   const [setupModalOpen, setSetupModalOpen] = useState(false);
@@ -105,6 +122,7 @@ export default function HomePage() {
       }
 
       setDisplayChanges(buildDisplayChanges(ingredients));
+      setAvgStats(buildAvgStats(ingredients));
       setOrderTop3(buildMonthlyTopOrders(orders, ingredients));
 
       if (onboarding?.completedSteps) {
@@ -170,7 +188,8 @@ export default function HomePage() {
             className="w-full flex flex-col rounded-2xl border border-gray-100 p-4"
             style={{ boxShadow: "0 1px 3px rgba(0,0,0,0.05)" }}
           >
-            <div className="flex items-center justify-between mb-2.5 shrink-0">
+            {/* カードヘッダー */}
+            <div className="flex items-center justify-between mb-3 shrink-0">
               <div>
                 <p className="text-sm font-semibold text-gray-900">今月の価格変動</p>
                 <p className="text-xs text-gray-400 mt-0.5">食材の値上がり・値下がり</p>
@@ -183,22 +202,55 @@ export default function HomePage() {
                 <p className="text-sm text-gray-400">価格変動データがまだありません</p>
               </div>
             ) : (
-              <div className="flex-1 flex flex-col justify-center gap-2">
-                {displayChanges.map((item) => (
-                  <div key={item.id} className="flex items-center justify-between">
-                    <span className="text-sm text-gray-700 truncate mr-2" style={{ maxWidth: "72%" }}>
-                      {item.name}
-                    </span>
-                    <span
-                      className="text-sm font-semibold shrink-0 tabular-nums"
-                      style={{ color: item.pct > 0 ? "#EF4444" : item.pct < 0 ? "#10B981" : "#9CA3AF" }}
+              <>
+                {/* 全体平均ボックス */}
+                {avgStats && (
+                  <div
+                    className="rounded-xl p-3 mb-3 text-center shrink-0"
+                    style={{ backgroundColor: "#F9FAFB" }}
+                  >
+                    <p className="text-xs text-gray-400 mb-1">全体平均</p>
+                    <p
+                      className="text-2xl font-bold tabular-nums leading-tight"
+                      style={{
+                        color: avgStats.pct > 0 ? "#EF4444" : avgStats.pct < 0 ? "#10B981" : "#9CA3AF",
+                      }}
                     >
-                      {item.pct > 0 ? "+" : ""}{item.pct.toFixed(1)}%{" "}
-                      {item.pct > 0 ? "↑" : item.pct < 0 ? "↓" : ""}
-                    </span>
+                      {avgStats.pct > 0 ? "+" : ""}{avgStats.pct.toFixed(1)}%
+                      {" "}{avgStats.pct > 0 ? "↑" : avgStats.pct < 0 ? "↓" : ""}
+                    </p>
+                    <p className="text-xs text-gray-400 mt-1">
+                      計{avgStats.changedCount}食材で変動
+                    </p>
                   </div>
-                ))}
-              </div>
+                )}
+
+                {/* 注目の変動ラベル */}
+                <p className="text-xs text-gray-400 mb-2 shrink-0">注目の変動</p>
+
+                {/* 個別リスト */}
+                <div className="space-y-2">
+                  {displayChanges.map((item) => (
+                    <div key={item.id} className="flex items-center justify-between">
+                      <span
+                        className="text-sm text-gray-700 truncate mr-2"
+                        style={{ maxWidth: "72%" }}
+                      >
+                        {item.name}
+                      </span>
+                      <span
+                        className="text-sm font-semibold shrink-0 tabular-nums"
+                        style={{
+                          color: item.pct > 0 ? "#EF4444" : item.pct < 0 ? "#10B981" : "#9CA3AF",
+                        }}
+                      >
+                        {item.pct > 0 ? "+" : ""}{item.pct.toFixed(1)}%
+                        {" "}{item.pct > 0 ? "↑" : item.pct < 0 ? "↓" : ""}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </>
             )}
           </div>
         </button>
