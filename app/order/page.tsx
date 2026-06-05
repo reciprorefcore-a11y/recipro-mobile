@@ -6,9 +6,17 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
 import { getIngredients } from "@/lib/firestore";
 
+const DRAFT_KEY = "recipro_order_draft";
+
 type SupplierSummary = {
   name: string;
   count: number;
+};
+
+type DraftInfo = {
+  supplierName: string;
+  supplierId: string;
+  itemCount: number;
 };
 
 function normalize(s: string) {
@@ -24,6 +32,7 @@ export default function OrderPage() {
   const [suppliers, setSuppliers] = useState<SupplierSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [draft, setDraft] = useState<DraftInfo | null>(null);
 
   useEffect(() => {
     if (!user) return;
@@ -42,6 +51,20 @@ export default function OrderPage() {
       })
       .finally(() => setLoading(false));
   }, [user]);
+
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem(DRAFT_KEY);
+      if (!raw) return;
+      const d = JSON.parse(raw) as { supplierName?: string; supplierId?: string; quantities?: Record<string, number> };
+      if (!d.supplierName || !d.supplierId) return;
+      const itemCount = Object.values(d.quantities ?? {}).filter((q) => q > 0).length;
+      if (itemCount === 0) return;
+      setDraft({ supplierName: d.supplierName, supplierId: d.supplierId, itemCount });
+    } catch {
+      // ignore
+    }
+  }, []);
 
   const filtered = useMemo(() => {
     if (!search.trim()) return suppliers;
@@ -65,21 +88,45 @@ export default function OrderPage() {
           <h1 className="text-xl font-bold">発注先を選択</h1>
         </div>
 
-        {/* 発注履歴カード */}
-        <Link
-          href="/order/history"
-          className="block bg-white rounded-xl shadow-sm p-4 hover:bg-orange-50 transition-colors"
+        {/* 発注履歴から再発注 */}
+        <button
+          type="button"
+          onClick={() => router.push("/order/history")}
+          className="w-full rounded-2xl p-4 flex items-center justify-between shadow-sm transition-opacity active:opacity-80"
+          style={{ backgroundColor: "#E85D2C" }}
         >
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="font-bold text-gray-900">📋 発注履歴から再発注</p>
-              <p className="text-xs text-gray-400 mt-0.5">過去の発注内容を再利用</p>
+          <div className="flex items-center gap-3">
+            <span className="text-2xl">📋</span>
+            <div className="text-left">
+              <div className="font-bold text-base text-white">発注履歴から再発注</div>
+              <div className="text-xs mt-0.5" style={{ color: "rgba(255,255,255,0.8)" }}>過去の発注内容を再利用</div>
             </div>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/icons/icon-arrow-right.svg" alt="" width={16} height={16}
-              style={{ filter: "brightness(0) opacity(0.3)" }} />
           </div>
-        </Link>
+          <span className="text-white text-lg">→</span>
+        </button>
+
+        {/* 一時保存から発注 */}
+        {draft && (
+          <button
+            type="button"
+            onClick={() => router.push(`/order/${draft.supplierId}`)}
+            className="w-full rounded-2xl p-4 flex items-center justify-between shadow-sm transition-opacity active:opacity-80"
+            style={{ backgroundColor: "#10B981" }}
+          >
+            <div className="flex items-center gap-3">
+              <span className="text-2xl">💾</span>
+              <div className="text-left">
+                <div className="font-bold text-base text-white">
+                  一時保存から発注 ({draft.itemCount})
+                </div>
+                <div className="text-xs mt-0.5" style={{ color: "rgba(255,255,255,0.8)" }}>
+                  {draft.supplierName} — 保存中の発注を確定する
+                </div>
+              </div>
+            </div>
+            <span className="text-white text-lg">→</span>
+          </button>
+        )}
 
         <div className="h-px bg-gray-200" />
 

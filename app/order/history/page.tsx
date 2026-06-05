@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
-import { getOrders } from "@/lib/firestore";
+import { getOrders, deleteOrder } from "@/lib/firestore";
 import type { Order } from "@/types";
 
 const DRAFT_KEY = "recipro_order_draft";
@@ -19,6 +19,7 @@ export default function OrderHistoryPage() {
   const router = useRouter();
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!user) return;
@@ -42,6 +43,20 @@ export default function OrderHistoryPage() {
     };
     sessionStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
     router.push(`/order/${supplierId}`);
+  };
+
+  const handleDelete = async (orderId: string) => {
+    if (!user) return;
+    if (!window.confirm("この発注履歴を削除しますか？\n削除すると発注金額分析からも除外されます。")) return;
+    setDeletingId(orderId);
+    try {
+      await deleteOrder(user.uid, orderId);
+      setOrders((prev) => prev.filter((o) => o.id !== orderId));
+    } catch {
+      alert("削除に失敗しました");
+    } finally {
+      setDeletingId(null);
+    }
   };
 
   return (
@@ -76,20 +91,30 @@ export default function OrderHistoryPage() {
             {orders.map((order) => (
               <div key={order.id} className="bg-white rounded-xl shadow-sm p-4 space-y-2">
                 <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0">
+                  <div className="min-w-0 flex-1">
                     <p className="font-bold text-gray-900 truncate">{order.supplier.name}</p>
                     <p className="text-xs text-gray-400 mt-0.5">
                       {formatDate(order.createdAt)} ・ {order.items.length}品目
                     </p>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => handleReorder(order)}
-                    className="shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold text-white"
-                    style={{ backgroundColor: "#E85D2C" }}
-                  >
-                    再発注
-                  </button>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => order.id && handleDelete(order.id)}
+                      disabled={!order.id || deletingId === order.id}
+                      className="px-2.5 py-1.5 rounded-lg text-xs font-medium text-red-500 border border-red-200 hover:bg-red-50 disabled:opacity-40 transition-colors"
+                    >
+                      {deletingId === order.id ? "削除中…" : "削除"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleReorder(order)}
+                      className="px-3 py-1.5 rounded-lg text-xs font-bold text-white"
+                      style={{ backgroundColor: "#E85D2C" }}
+                    >
+                      再発注
+                    </button>
+                  </div>
                 </div>
                 <div className="text-xs text-gray-500 space-y-0.5">
                   {order.items.slice(0, 3).map((item) => (

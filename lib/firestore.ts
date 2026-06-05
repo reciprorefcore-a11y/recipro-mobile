@@ -590,3 +590,7 @@ export async function getOrders(companyId: string, maxCount = 20): Promise<Order
   const snap = await getDocs(q);
   return snap.docs.map((d) => ({ id: d.id, ...d.data() } as Order));
 }
+
+export async function deleteOrder(companyId: string, orderId: string): Promise<void> {
+  await deleteDoc(doc(db, "companies", companyId, "orders", orderId));
+}

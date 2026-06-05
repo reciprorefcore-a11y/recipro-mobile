@@ -196,7 +196,7 @@ export default function HomePage() {
               </div>
               <span
                 className="text-xs font-medium text-white px-3 py-1.5 rounded-full"
-                style={{ backgroundColor: "#C8602A" }}
+                style={{ backgroundColor: "#E85D2C" }}
               >
                 詳細
               </span>
@@ -277,7 +277,7 @@ export default function HomePage() {
               </div>
               <span
                 className="text-xs font-medium text-white px-3 py-1.5 rounded-full"
-                style={{ backgroundColor: "#C8602A" }}
+                style={{ backgroundColor: "#E85D2C" }}
               >
                 詳細
               </span>
