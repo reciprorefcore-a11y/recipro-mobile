@@ -43,10 +43,10 @@ export async function saveStoreInfo(
   uid: string,
   data: Partial<Pick<UserProfile, "storeName" | "address" | "zipCode" | "phone" | "fax" | "personInCharge">>
 ): Promise<void> {
-  await updateDoc(doc(db, "users", uid), {
+  await setDoc(doc(db, "users", uid), {
     ...data,
     updatedAt: serverTimestamp(),
-  });
+  }, { merge: true });
 }
 
 export async function saveConsent(uid: string, termsVersion: string): Promise<void> {

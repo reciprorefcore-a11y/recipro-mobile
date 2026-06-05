@@ -4,7 +4,10 @@ import { useAuth } from "@/hooks/useAuth";
 import { useRouter, usePathname } from "next/navigation";
 import { ReactNode, useEffect } from "react";
 
+// ログインしていなくてもアクセス可能なパス
 const PUBLIC_PATHS = ["/login", "/signup", "/terms", "/privacy", "/contact"];
+// ログイン済みのときだけ弾くパス（規約・お問い合わせ等は除外）
+const AUTH_REDIRECT_PATHS = ["/login", "/signup"];
 
 export default function AuthGuard({ children }: { children: ReactNode }) {
   const { user, loading } = useAuth();
@@ -18,7 +21,8 @@ export default function AuthGuard({ children }: { children: ReactNode }) {
       router.replace("/login");
     }
 
-    if (user && PUBLIC_PATHS.includes(pathname)) {
+    // ログイン/サインアップ画面だけホームへリダイレクト（規約等は除外）
+    if (user && AUTH_REDIRECT_PATHS.includes(pathname)) {
       router.replace("/");
     }
   }, [user, loading, pathname, router]);

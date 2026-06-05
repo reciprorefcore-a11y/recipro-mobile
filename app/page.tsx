@@ -10,7 +10,7 @@ import {
   initOnboarding,
 } from "@/lib/firestore";
 import ReciproLogo from "@/components/ReciproLogo";
-import UnupdatedIngredientsList from "@/components/UnupdatedIngredientsList";
+import TopOrderedIngredients from "@/components/TopOrderedIngredients";
 import Card from "@/components/ui/Card";
 import SetupProgressBar from "@/components/SetupProgressBar";
 import SetupModal from "@/components/SetupModal";
@@ -154,7 +154,7 @@ export default function HomePage() {
           </Card>
         </button>
 
-        <UnupdatedIngredientsList />
+        <TopOrderedIngredients />
 
         {/* アクションボタン */}
         <div className="space-y-3 mt-auto">
