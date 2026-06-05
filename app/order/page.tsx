@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
 import { getIngredients } from "@/lib/firestore";
+import WeatherWidget from "@/components/WeatherWidget";
 
 const DRAFT_KEY = "recipro_order_draft";
 
@@ -87,6 +88,9 @@ export default function OrderPage() {
           </button>
           <h1 className="text-xl font-bold">発注先を選択</h1>
         </div>
+
+        {/* 天気ウィジェット */}
+        <WeatherWidget />
 
         {/* 発注履歴から再発注 */}
         <button

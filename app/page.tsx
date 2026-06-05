@@ -12,6 +12,7 @@ import {
 } from "@/lib/firestore";
 import ReciproLogo from "@/components/ReciproLogo";
 import SetupModal from "@/components/SetupModal";
+import WeatherWidget from "@/components/WeatherWidget";
 import { IconSearch } from "@/components/icons";
 import type { OnboardingSettings, Ingredient, Order } from "@/types";
 
@@ -177,6 +178,9 @@ export default function HomePage() {
             {avatarLetter}
           </button>
         </div>
+
+        {/* 天気ウィジェット */}
+        <WeatherWidget />
 
         {/* 今月の価格変動カード */}
         <button
