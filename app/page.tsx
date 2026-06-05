@@ -10,9 +10,6 @@ import {
   initOnboarding,
 } from "@/lib/firestore";
 import ReciproLogo from "@/components/ReciproLogo";
-import TopOrderedIngredients from "@/components/TopOrderedIngredients";
-import Card from "@/components/ui/Card";
-import SetupProgressBar from "@/components/SetupProgressBar";
 import SetupModal from "@/components/SetupModal";
 import { IconSearch } from "@/components/icons";
 import type { OnboardingSettings, Ingredient } from "@/types";
@@ -22,31 +19,28 @@ type CompletedSteps = OnboardingSettings["completedSteps"];
 type PriceChangeItem = {
   id: string;
   name: string;
-  supplier?: string;
-  oldPrice: number;
-  currentPrice: number;
   pct: number;
 };
 
-function calcTopChanges(ingredients: Ingredient[]): PriceChangeItem[] {
-  return ingredients
-    .filter((i) => i.isActive && i.oldPrice != null && i.oldPrice > 0)
-    .map((i) => ({
-      id: i.id,
-      name: i.ingredientName,
-      supplier: i.supplier,
-      oldPrice: i.oldPrice!,
-      currentPrice: i.currentPrice,
-      pct: ((i.currentPrice - i.oldPrice!) / i.oldPrice!) * 100,
-    }))
-    .sort((a, b) => b.pct - a.pct);
+function buildDisplayChanges(ingredients: Ingredient[]): PriceChangeItem[] {
+  const active = ingredients.filter(
+    (i) => i.isActive && i.oldPrice != null && i.oldPrice > 0
+  );
+  const withPct = active.map((i) => ({
+    id: i.id,
+    name: i.ingredientName,
+    pct: ((i.currentPrice - i.oldPrice!) / i.oldPrice!) * 100,
+  }));
+  const rising = withPct.filter((i) => i.pct > 0).sort((a, b) => b.pct - a.pct).slice(0, 3);
+  const falling = withPct.filter((i) => i.pct < 0).sort((a, b) => a.pct - b.pct).slice(0, 1);
+  return [...rising, ...falling];
 }
 
 export default function HomePage() {
   const { user } = useAuth();
   const router = useRouter();
   const [storeName, setStoreName] = useState("");
-  const [topChanges, setTopChanges] = useState<PriceChangeItem[]>([]);
+  const [displayChanges, setDisplayChanges] = useState<PriceChangeItem[]>([]);
   const [completedSteps, setCompletedSteps] = useState<CompletedSteps | null>(null);
   const [setupModalOpen, setSetupModalOpen] = useState(false);
   const [ready, setReady] = useState(false);
@@ -73,7 +67,7 @@ export default function HomePage() {
         return;
       }
 
-      setTopChanges(calcTopChanges(ingredients));
+      setDisplayChanges(buildDisplayChanges(ingredients));
 
       if (onboarding?.completedSteps) {
         setCompletedSteps(onboarding.completedSteps);
@@ -84,116 +78,141 @@ export default function HomePage() {
     });
   }, [user, router]);
 
+  const avatarLetter = storeName ? storeName.charAt(0) : "U";
+
   if (!ready) {
     return (
-      <main className="min-h-screen bg-gray-50 flex justify-center">
-        <div className="w-full max-w-[480px] px-4 py-6 space-y-4 animate-pulse">
-          <div className="h-8 bg-gray-200 rounded w-36" />
-          <div className="h-24 bg-gray-200 rounded-xl" />
-          <div className="h-20 bg-gray-200 rounded-xl" />
-          <div className="h-14 bg-gray-200 rounded-xl" />
-          <div className="h-14 bg-gray-200 rounded-xl" />
+      <main
+        className="bg-white flex justify-center"
+        style={{ height: "calc(100svh - 60px)", overflow: "hidden" }}
+      >
+        <div className="w-full max-w-[480px] px-4 py-5 flex flex-col gap-4 animate-pulse">
+          <div className="flex items-center justify-between">
+            <div className="h-7 bg-gray-100 rounded w-32" />
+            <div className="h-8 w-8 bg-gray-100 rounded-full" />
+          </div>
+          <div className="flex-1 bg-gray-100 rounded-2xl" />
+          <div className="h-14 bg-gray-100 rounded-xl" />
+          <div className="h-12 bg-gray-100 rounded-xl" />
         </div>
       </main>
     );
   }
 
-  const top3 = topChanges.slice(0, 3);
-
   return (
-    <main className="bg-gray-50 flex justify-center" style={{ height: "calc(100svh - 60px)", overflow: "hidden" }}>
-      <div className="w-full max-w-[480px] px-4 py-4 space-y-3 flex flex-col" style={{ height: "100%" }}>
-
+    <main
+      className="bg-white flex justify-center"
+      style={{ height: "calc(100svh - 60px)", overflow: "hidden" }}
+    >
+      <div
+        className="w-full max-w-[480px] px-4 flex flex-col"
+        style={{ paddingTop: "16px", paddingBottom: "16px", height: "100%", gap: "12px" }}
+      >
         {/* ヘッダー */}
-        <div className="flex items-center justify-between">
-          <ReciproLogo width={140} />
-          <div className="flex items-center gap-3">
-            {storeName && (
-              <p className="text-sm text-gray-600 font-medium">{storeName}</p>
-            )}
-          </div>
+        <div className="flex items-center justify-between shrink-0">
+          <ReciproLogo width={120} />
+          <button
+            type="button"
+            onClick={() => router.push("/menu")}
+            className="flex items-center justify-center rounded-full font-semibold text-sm text-white shrink-0"
+            style={{
+              width: "34px",
+              height: "34px",
+              backgroundColor: "#E85D2C",
+              fontSize: "14px",
+            }}
+          >
+            {avatarLetter}
+          </button>
         </div>
 
-        {completedSteps && (
-          <SetupProgressBar
-            completedSteps={completedSteps}
-            onImportClick={() => setSetupModalOpen(true)}
-          />
-        )}
-
-        {/* 価格変動サマリーカード */}
+        {/* 価格変動カード */}
         <button
+          type="button"
           onClick={() => router.push("/price-changes")}
-          className="w-full text-left"
+          className="w-full text-left flex-1 min-h-0 flex"
         >
-          <Card>
-            <p className="text-sm text-gray-500 mb-2 font-medium">今月の食材変動価格推移</p>
-            {top3.length === 0 ? (
-              <p className="text-sm text-gray-400 py-1">
-                価格変動データがまだありません
-              </p>
+          <div
+            className="w-full flex flex-col rounded-2xl border border-gray-100 p-4"
+            style={{ boxShadow: "0 1px 3px rgba(0,0,0,0.05)" }}
+          >
+            <div className="flex items-start justify-between mb-3 shrink-0">
+              <div>
+                <p className="text-base font-semibold text-gray-900">今月の価格変動</p>
+                <p className="text-xs text-gray-400 mt-0.5">食材の値上がり・値下がり</p>
+              </div>
+              <span className="text-xs text-gray-400 mt-0.5">詳細 ›</span>
+            </div>
+
+            {displayChanges.length === 0 ? (
+              <div className="flex-1 flex items-center justify-center">
+                <p className="text-sm text-gray-400">価格変動データがまだありません</p>
+              </div>
             ) : (
-              <div className="space-y-1.5">
-                {top3.map((item, i) => (
+              <div className="flex-1 flex flex-col justify-center gap-2.5">
+                {displayChanges.map((item) => (
                   <div key={item.id} className="flex items-center justify-between">
-                    <span className="text-sm text-gray-700">
-                      <span className="text-gray-400 mr-1">{i + 1}.</span>
+                    <span
+                      className="text-sm text-gray-700 truncate mr-2"
+                      style={{ maxWidth: "70%" }}
+                    >
                       {item.name}
                     </span>
                     <span
-                      className="text-sm font-bold"
-                      style={{ color: item.pct > 0 ? "#D93025" : item.pct < 0 ? "#0F9D58" : "#555" }}
+                      className="text-sm font-semibold shrink-0 tabular-nums"
+                      style={{
+                        color: item.pct > 0 ? "#EF4444" : item.pct < 0 ? "#10B981" : "#9CA3AF",
+                      }}
                     >
-                      {item.pct > 0 ? "+" : ""}{item.pct.toFixed(1)}% {item.pct > 0 ? "↑" : item.pct < 0 ? "↓" : ""}
+                      {item.pct > 0 ? "+" : ""}{item.pct.toFixed(1)}%
+                      {" "}{item.pct > 0 ? "↑" : item.pct < 0 ? "↓" : ""}
                     </span>
                   </div>
                 ))}
               </div>
             )}
-            <p className="text-xs text-gray-400 mt-2">タップで全リストへ →</p>
-          </Card>
+          </div>
         </button>
 
-        <TopOrderedIngredients />
+        {/* メインCTA: 伝票撮影 */}
+        <button
+          type="button"
+          onClick={() => router.push("/receipt")}
+          className="w-full flex items-center justify-center gap-2.5 rounded-xl font-bold text-white transition-opacity active:opacity-80 shrink-0"
+          style={{
+            height: "56px",
+            fontSize: "17px",
+            backgroundColor: "#E85D2C",
+            boxShadow: "0 2px 8px rgba(232,93,44,0.25)",
+          }}
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/icons/icon-camera.svg"
+            alt=""
+            width={22}
+            height={22}
+            style={{ filter: "brightness(0) invert(1)" }}
+          />
+          伝票を撮影して更新
+        </button>
 
-        {/* アクションボタン */}
-        <div className="space-y-3 mt-auto">
-          <button
-            onClick={() => router.push("/receipt")}
-            className="w-full flex items-center justify-center gap-3 rounded-xl font-bold text-white bg-[#E85D2C] hover:bg-[#C04A1F] transition-colors cursor-pointer"
-            style={{
-              padding: "16px 24px",
-              fontSize: "24px",
-              boxShadow: "0 4px 8px rgba(232, 93, 44, 0.3)",
-              borderRadius: "12px",
-            }}
-          >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src="/icons/icon-camera.svg"
-              alt=""
-              width={28}
-              height={28}
-              style={{ filter: "brightness(0) invert(1)" }}
-            />
-            伝票を撮影して更新
-          </button>
-
-          <button
-            onClick={() => router.push("/search")}
-            className="w-full flex items-center justify-center gap-3 font-bold bg-white hover:bg-orange-50 transition-colors cursor-pointer"
-            style={{
-              padding: "14px 30px",
-              fontSize: "21px",
-              color: "#E85D2C",
-              border: "2px solid #E85D2C",
-              borderRadius: "12px",
-            }}
-          >
-            <IconSearch size={24} className="text-primary" />
-            食材を検索して更新
-          </button>
-        </div>
+        {/* サブCTA: 食材検索 */}
+        <button
+          type="button"
+          onClick={() => router.push("/search")}
+          className="w-full flex items-center justify-center gap-2.5 rounded-xl font-semibold transition-opacity active:opacity-70 shrink-0"
+          style={{
+            height: "50px",
+            fontSize: "16px",
+            color: "#E85D2C",
+            border: "1.5px solid #E85D2C",
+            backgroundColor: "transparent",
+          }}
+        >
+          <IconSearch size={20} className="text-primary" />
+          食材を検索して更新
+        </button>
       </div>
 
       {completedSteps && (
