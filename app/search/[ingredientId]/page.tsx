@@ -293,10 +293,7 @@ function MainEditView({
   return (
     <>
       <Card>
-        <p className="text-xs text-gray-400">
-          マイカタログID: {ingredient.myCatalogId || "未設定"}
-        </p>
-        <p className="mt-1 text-xs text-gray-500">
+        <p className="text-xs text-gray-500">
           最終更新: {formatDaysAgo(ingredient.updatedAt)}
         </p>
       </Card>
@@ -462,13 +459,6 @@ function AdvancedEditView({
             onBlur={(e) => onIngredientNameKanaChange(toKatakana(e.target.value))}
             placeholder="例: ブタバラスライス"
           />
-          <div>
-            <label className="block text-sm font-medium mb-1 text-gray-700">マイカタログID</label>
-            <p className="rounded-xl border border-gray-100 bg-gray-50 px-4 py-3 text-[16px] text-gray-500">
-              {ingredient.myCatalogId || "未設定"}
-            </p>
-            <p className="mt-1 text-xs text-gray-400">※レシプロ本体との紐付けのため変更できません</p>
-          </div>
           <Input
             label="取引先名カナ (カタカナ)"
             value={supplierKana}

@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
 import { getIngredients } from "@/lib/firestore";
-import OrderItemRow from "@/components/OrderItemRow";
 import type { Ingredient } from "@/types";
 
 const DRAFT_KEY = "recipro_order_draft";
@@ -12,9 +11,14 @@ const DRAFT_KEY = "recipro_order_draft";
 export type OrderDraft = {
   supplierId: string;
   supplierName: string;
-  quantities: Record<string, number>; // ingredientId -> quantity
+  quantities: Record<string, number>;
   deliveryDate: string;
   generalNote: string;
+};
+
+type OrderItem = {
+  ingredient: Ingredient;
+  quantity: number;
 };
 
 export default function OrderInputPage() {
@@ -24,28 +28,32 @@ export default function OrderInputPage() {
   const supplierId = params.supplierId as string;
   const supplierName = decodeURIComponent(supplierId);
 
-  const [ingredients, setIngredients] = useState<Ingredient[]>([]);
-  const [quantities, setQuantities] = useState<Record<string, number>>({});
-  const [searchQuery, setSearchQuery] = useState("");
-  const [showOnlySelected, setShowOnlySelected] = useState(false);
+  const [allIngredients, setAllIngredients] = useState<Ingredient[]>([]);
+  const [orderItems, setOrderItems] = useState<OrderItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showModal, setShowModal] = useState(false);
+  const [modalSearch, setModalSearch] = useState("");
 
   useEffect(() => {
     if (!user) return;
     getIngredients(user.uid)
       .then((all) => {
-        const filtered = all.filter(
-          (i) => i.isActive && i.supplier === supplierName
-        );
-        setIngredients(filtered);
+        const filtered = all.filter((i) => i.isActive && i.supplier === supplierName);
+        setAllIngredients(filtered);
 
-        // 下書き復元
         try {
           const raw = sessionStorage.getItem(DRAFT_KEY);
           if (raw) {
             const draft: OrderDraft = JSON.parse(raw);
             if (draft.supplierId === supplierId) {
-              setQuantities(draft.quantities ?? {});
+              const items: OrderItem[] = [];
+              for (const [id, qty] of Object.entries(draft.quantities)) {
+                if (qty > 0) {
+                  const ing = filtered.find((i) => i.id === id);
+                  if (ing) items.push({ ingredient: ing, quantity: qty });
+                }
+              }
+              setOrderItems(items);
             }
           }
         } catch {
@@ -55,37 +63,50 @@ export default function OrderInputPage() {
       .finally(() => setLoading(false));
   }, [user, supplierId, supplierName]);
 
-  const filtered = useMemo(() => {
-    let list = ingredients;
-    if (showOnlySelected) {
-      list = list.filter((i) => (quantities[i.id] ?? 0) > 0);
-    }
-    if (searchQuery) {
-      const q = searchQuery.toLowerCase();
-      list = list.filter(
-        (i) =>
-          i.ingredientName.toLowerCase().includes(q) ||
-          (i.myCatalogId ?? "").includes(q)
+  const addedIds = useMemo(() => new Set(orderItems.map((o) => o.ingredient.id)), [orderItems]);
+
+  const modalFiltered = useMemo(() => {
+    if (!modalSearch) return allIngredients;
+    const q = modalSearch.toLowerCase();
+    return allIngredients.filter(
+      (i) =>
+        i.ingredientName.toLowerCase().includes(q) ||
+        (i.ingredientNameKana ?? "").toLowerCase().includes(q)
+    );
+  }, [allIngredients, modalSearch]);
+
+  const addItem = (ingredient: Ingredient) => {
+    if (addedIds.has(ingredient.id)) return;
+    setOrderItems((prev) => [...prev, { ingredient, quantity: 1 }]);
+  };
+
+  const removeItem = (id: string) => {
+    setOrderItems((prev) => prev.filter((o) => o.ingredient.id !== id));
+  };
+
+  const updateQty = (id: string, qty: number) => {
+    const v = Math.max(0, qty);
+    if (v === 0) {
+      removeItem(id);
+    } else {
+      setOrderItems((prev) =>
+        prev.map((o) => (o.ingredient.id === id ? { ...o, quantity: v } : o))
       );
     }
-    return list;
-  }, [ingredients, quantities, searchQuery, showOnlySelected]);
+  };
 
-  const selectedCount = Object.values(quantities).filter((q) => q > 0).length;
+  const selectedCount = orderItems.filter((o) => o.quantity > 0).length;
 
-  const handleChange = (ingredientId: string, quantity: number) => {
-    setQuantities((prev) => ({ ...prev, [ingredientId]: quantity }));
+  const buildDraft = (): OrderDraft => {
+    const quantities: Record<string, number> = {};
+    for (const { ingredient, quantity } of orderItems) {
+      if (quantity > 0) quantities[ingredient.id] = quantity;
+    }
+    return { supplierId, supplierName, quantities, deliveryDate: "today", generalNote: "" };
   };
 
   const saveDraftAndNavigate = (path: string) => {
-    const draft: OrderDraft = {
-      supplierId,
-      supplierName,
-      quantities,
-      deliveryDate: "today",
-      generalNote: "",
-    };
-    sessionStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
+    sessionStorage.setItem(DRAFT_KEY, JSON.stringify(buildDraft()));
     router.push(path);
   };
 
@@ -99,9 +120,10 @@ export default function OrderInputPage() {
 
   return (
     <main className="min-h-screen bg-gray-50 flex justify-center">
-      <div className="w-full max-w-[480px] flex flex-col" style={{ paddingBottom: 80 }}>
+      <div className="w-full max-w-[480px] flex flex-col" style={{ paddingBottom: "calc(60px + env(safe-area-inset-bottom, 0px) + 72px)" }}>
+
         {/* ヘッダー */}
-        <div className="sticky top-0 z-10 bg-white border-b border-gray-100 px-4 py-3 space-y-2">
+        <div className="sticky top-0 z-10 bg-white border-b border-gray-100 px-4 py-3">
           <div className="flex items-center gap-3">
             <button
               onClick={() => router.push("/order")}
@@ -116,63 +138,81 @@ export default function OrderInputPage() {
               {supplierName} / 発注内容の入力
             </h1>
           </div>
-
-          <div className="relative">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/icons/icon-search.svg" alt="" width={16} height={16}
-              className="absolute left-3 top-1/2 -translate-y-1/2 opacity-40" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="食材名またはコードで検索"
-              className="w-full rounded-xl border border-gray-200 pl-9 pr-4 py-2.5 text-[15px] outline-none focus:ring-2 focus:ring-primary"
-            />
-          </div>
-
-          <div className="flex items-center justify-between">
-            <p className="text-sm text-gray-500">
-              全{ingredients.length}件
-              {selectedCount > 0 && (
-                <span className="ml-2 text-primary font-semibold">
-                  ({selectedCount}品選択中)
-                </span>
-              )}
-            </p>
-            <label className="flex items-center gap-1.5 text-sm text-gray-600 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={showOnlySelected}
-                onChange={(e) => setShowOnlySelected(e.target.checked)}
-                className="accent-primary"
-              />
-              選択のみ表示
-            </label>
-          </div>
         </div>
 
-        {/* 食材リスト */}
-        <div className="flex-1 bg-white">
-          {filtered.length === 0 ? (
-            <p className="text-center text-sm text-gray-400 py-12">
-              {showOnlySelected ? "選択中の食材がありません" : "該当する食材がありません"}
-            </p>
+        {/* 発注リスト */}
+        <div className="flex-1 px-4 py-4 space-y-3">
+          <p className="text-sm text-gray-500">全{orderItems.length}件</p>
+
+          {orderItems.length === 0 ? (
+            <div className="bg-white rounded-2xl shadow-sm p-8 text-center text-gray-400 text-sm">
+              商品を追加してください
+            </div>
           ) : (
-            filtered.map((item) => (
-              <OrderItemRow
-                key={item.id}
-                ingredientId={item.id}
-                myCatalogId={item.myCatalogId}
-                ingredientName={item.ingredientName}
-                unit={item.unit}
-                quantity={quantities[item.id] ?? 0}
-                onChange={handleChange}
-              />
-            ))
+            <div className="bg-white rounded-2xl shadow-sm divide-y divide-gray-100">
+              {orderItems.map(({ ingredient, quantity }) => (
+                <div key={ingredient.id} className="px-4 py-3 flex items-center gap-3">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-gray-900 truncate">
+                      {ingredient.ingredientName}
+                    </p>
+                    {ingredient.spec && (
+                      <p className="text-xs text-gray-400 truncate">{ingredient.spec}</p>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => updateQty(ingredient.id, quantity - 1)}
+                      className="w-9 h-9 rounded-full border border-gray-300 flex items-center justify-center text-gray-500 text-lg font-bold"
+                    >
+                      −
+                    </button>
+                    <input
+                      type="number"
+                      value={quantity}
+                      onChange={(e) => {
+                        const v = parseInt(e.target.value, 10);
+                        updateQty(ingredient.id, Number.isFinite(v) ? v : 1);
+                      }}
+                      min={1}
+                      className="w-12 text-center text-base font-bold border-b-2 border-gray-300 focus:border-primary outline-none"
+                      style={{ color: "#E85D2C" }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => updateQty(ingredient.id, quantity + 1)}
+                      className="w-9 h-9 rounded-full flex items-center justify-center text-white text-lg font-bold"
+                      style={{ backgroundColor: "#E85D2C" }}
+                    >
+                      ＋
+                    </button>
+                    <span className="text-sm text-gray-500 w-5">{ingredient.unit}</span>
+                    <button
+                      type="button"
+                      onClick={() => removeItem(ingredient.id)}
+                      className="ml-1 text-gray-300 hover:text-red-400 transition-colors"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
           )}
+
+          {/* 商品を追加ボタン */}
+          <button
+            type="button"
+            onClick={() => { setModalSearch(""); setShowModal(true); }}
+            className="w-full py-3 rounded-xl border-2 border-dashed font-semibold text-sm transition-colors hover:bg-orange-50"
+            style={{ borderColor: "#E85D2C", color: "#E85D2C" }}
+          >
+            ＋ 商品を追加
+          </button>
         </div>
 
-        {/* フッター */}
+        {/* 下部固定フッター */}
         <div
           className="fixed left-0 right-0 flex justify-center"
           style={{ bottom: "calc(60px + env(safe-area-inset-bottom, 0px))", zIndex: 110 }}
@@ -181,9 +221,7 @@ export default function OrderInputPage() {
             <button
               type="button"
               onClick={() => {
-                sessionStorage.setItem(DRAFT_KEY, JSON.stringify({
-                  supplierId, supplierName, quantities, deliveryDate: "today", generalNote: "",
-                }));
+                sessionStorage.setItem(DRAFT_KEY, JSON.stringify(buildDraft()));
                 router.push("/");
               }}
               className="flex-1 py-3 rounded-xl border border-gray-300 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors"
@@ -202,6 +240,107 @@ export default function OrderInputPage() {
           </div>
         </div>
       </div>
+
+      {/* 商品追加モーダル */}
+      {showModal && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 200,
+            display: "flex",
+            alignItems: "flex-end",
+            justifyContent: "center",
+            backgroundColor: "rgba(0,0,0,0.4)",
+          }}
+          onClick={() => setShowModal(false)}
+        >
+          <div
+            style={{
+              width: "100%",
+              maxWidth: "480px",
+              backgroundColor: "#fff",
+              borderRadius: "20px 20px 0 0",
+              paddingBottom: "calc(env(safe-area-inset-bottom) + 16px)",
+              maxHeight: "85vh",
+              display: "flex",
+              flexDirection: "column",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* モーダルヘッダー */}
+            <div className="flex items-center justify-between px-4 py-4 border-b border-gray-100">
+              <h2 className="font-bold text-gray-900">商品を追加</h2>
+              <button
+                type="button"
+                onClick={() => setShowModal(false)}
+                className="text-gray-400 hover:text-gray-600 text-xl w-8 h-8 flex items-center justify-center"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* 検索 */}
+            <div className="px-4 py-3 border-b border-gray-100">
+              <div className="relative">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src="/icons/icon-search.svg" alt="" width={16} height={16}
+                  className="absolute left-3 top-1/2 -translate-y-1/2 opacity-40" />
+                <input
+                  type="text"
+                  value={modalSearch}
+                  onChange={(e) => setModalSearch(e.target.value)}
+                  placeholder="食材名で検索..."
+                  autoFocus
+                  className="w-full rounded-xl border border-gray-200 pl-9 pr-4 py-2.5 text-[15px] outline-none focus:ring-2 focus:ring-primary"
+                />
+              </div>
+            </div>
+
+            {/* 食材一覧 */}
+            <div style={{ overflowY: "auto", flex: 1 }}>
+              {modalFiltered.length === 0 ? (
+                <p className="text-center text-sm text-gray-400 py-8">
+                  {allIngredients.length === 0 ? "食材が登録されていません" : "該当する食材がありません"}
+                </p>
+              ) : (
+                <div className="divide-y divide-gray-100">
+                  {modalFiltered.map((item) => {
+                    const already = addedIds.has(item.id);
+                    return (
+                      <div
+                        key={item.id}
+                        className="flex items-center justify-between px-4 py-3"
+                      >
+                        <div className="flex-1 min-w-0 mr-3">
+                          <p className="text-sm font-medium text-gray-900 truncate">
+                            {item.ingredientName}
+                          </p>
+                          <p className="text-xs text-gray-400">
+                            ¥{item.currentPrice.toLocaleString()} / {item.unit}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => { addItem(item); }}
+                          disabled={already}
+                          className="shrink-0 px-4 py-1.5 rounded-lg text-xs font-bold transition-colors disabled:opacity-40"
+                          style={{
+                            backgroundColor: already ? "#f3f4f6" : "#E85D2C",
+                            color: already ? "#9ca3af" : "#fff",
+                          }}
+                        >
+                          {already ? "追加済" : "追加"}
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }

@@ -4,8 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/hooks/useAuth";
-import { getUserProfile, getIngredients, updateIngredient } from "@/lib/firestore";
-import { getCurrentCounter, getNextMyCatalogId } from "@/lib/myCatalogIdGenerator";
+import { getUserProfile } from "@/lib/firestore";
 import { signOut } from "@/lib/auth";
 import type { UserProfile } from "@/types";
 
@@ -23,43 +22,12 @@ export default function MenuPage() {
 
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [signingOut, setSigningOut] = useState(false);
-  const [catalogCounter, setCatalogCounter] = useState<number | null>(null);
-  const [bulkAssigning, setBulkAssigning] = useState(false);
-  const [bulkMsg, setBulkMsg] = useState("");
   const [importPhase, setImportPhase] = useState<ImportPhase>({ name: "idle" });
 
   useEffect(() => {
     if (!user) return;
     getUserProfile(user.uid).then((p) => setProfile(p));
-    getCurrentCounter(user.uid).then(setCatalogCounter);
   }, [user]);
-
-  const handleBulkAssign = async () => {
-    if (!user) return;
-    setBulkMsg("");
-    const ingredients = await getIngredients(user.uid);
-    const noIdItems = ingredients.filter((i) => !i.myCatalogId && i.isActive);
-    if (noIdItems.length === 0) {
-      setBulkMsg("✅ 未採番の食材はありません");
-      return;
-    }
-    if (!window.confirm(`${noIdItems.length}件の食材にマイカタログIDを採番しますか？`)) return;
-    setBulkAssigning(true);
-    try {
-      let count = 0;
-      for (const item of noIdItems) {
-        const id = await getNextMyCatalogId(user.uid);
-        await updateIngredient(user.uid, item.id, { myCatalogId: id });
-        count++;
-      }
-      setBulkMsg(`✅ ${count}件にIDを採番しました`);
-      getCurrentCounter(user.uid).then(setCatalogCounter);
-    } catch {
-      setBulkMsg("❌ 採番に失敗しました");
-    } finally {
-      setBulkAssigning(false);
-    }
-  };
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -168,35 +136,6 @@ export default function MenuPage() {
           </div>
         )}
 
-        {/* マイカタログID管理 */}
-        <div className="bg-white rounded-2xl shadow-sm p-4 space-y-3">
-          <p className="text-sm font-medium text-gray-500">マイカタログID管理</p>
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs text-gray-400">次に発行されるID</p>
-              <p className="text-lg font-bold text-gray-900">
-                {catalogCounter !== null ? catalogCounter.toLocaleString() : "—"}
-              </p>
-            </div>
-            <button
-              onClick={handleBulkAssign}
-              disabled={bulkAssigning}
-              className="text-xs font-semibold px-3 py-1.5 rounded-lg border disabled:opacity-50"
-              style={{ color: "#E85D2C", borderColor: "#E85D2C" }}
-            >
-              {bulkAssigning ? "採番中..." : "一括採番"}
-            </button>
-          </div>
-          <p className="text-xs text-gray-400">
-            モバイル版が発行するIDは 10000 以上です。レシプロ本体のIDとは重複しません。
-          </p>
-          {bulkMsg && (
-            <p className={`text-xs text-center ${bulkMsg.startsWith("❌") ? "text-red-500" : "text-gray-500"}`}>
-              {bulkMsg}
-            </p>
-          )}
-        </div>
-
         {/* レシプロから食材マスタを取り込む */}
         <div className="bg-white rounded-2xl shadow-sm p-4 space-y-3">
           <p className="text-sm font-medium text-gray-500">レシプロから食材マスタを取り込む</p>
@@ -223,7 +162,7 @@ export default function MenuPage() {
               </label>
               <div className="bg-amber-50 rounded-xl p-3 space-y-1">
                 <p className="text-xs font-semibold text-amber-800">⚠ 注意</p>
-                <p className="text-xs text-amber-700">既存食材(同じマイカタログID)は更新されます</p>
+                <p className="text-xs text-amber-700">既存食材は更新されます</p>
                 <p className="text-xs text-amber-700">新規食材は追加されます</p>
               </div>
             </>

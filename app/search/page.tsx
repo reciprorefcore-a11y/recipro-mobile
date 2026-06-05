@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useAuth } from "@/hooks/useAuth";
 import { getIngredients, addIngredient } from "@/lib/firestore";
+import { getNextMyCatalogId } from "@/lib/myCatalogIdGenerator";
 import { saveIngredientSnapshot } from "@/lib/ingredientSnapshot";
 import { seedIngredients } from "@/lib/seedData";
 import IngredientCard from "@/components/IngredientCard";
@@ -72,10 +73,7 @@ export default function SearchPage() {
     }, new Map<string, number>())
   ).sort((a, b) => b[1] - a[1]);
 
-  // レシプロ反映の集計（最新のingredients stateから導出）
   const activeIngredients = ingredients.filter((i) => i.isActive);
-  const withId = activeIngredients.filter((i) => !!i.myCatalogId);
-  const withoutId = activeIngredients.filter((i) => !i.myCatalogId);
 
   const handleSeed = async () => {
     if (!companyId) return;
@@ -97,7 +95,8 @@ export default function SearchPage() {
     if (!companyId) return;
     const uniqueId = `${companyId.slice(0, 8)}_${Date.now()}`;
     const nameNormalized = data.ingredientName.replace(/[\s　]/g, "");
-    await addIngredient(companyId, { uniqueId, nameNormalized, ...data });
+    const myCatalogId = await getNextMyCatalogId(companyId);
+    await addIngredient(companyId, { uniqueId, nameNormalized, ...data, myCatalogId });
     await fetchIngredients();
   };
 
@@ -106,10 +105,9 @@ export default function SearchPage() {
     setDownloading(true);
     setDownloadError("");
     try {
-      // 最新食材を取得してカウント更新
       const latest = await getIngredients(companyId);
       setIngredients(latest);
-      const activeWithId = latest.filter((i) => i.isActive && !!i.myCatalogId);
+      const activeWithId = latest.filter((i) => i.isActive);
 
       const token = await user.getIdToken();
       const res = await fetch("/api/csv/ingredients", {
@@ -228,73 +226,24 @@ export default function SearchPage() {
         {/* レシプロ本体に反映 */}
         <section className="bg-white rounded-2xl shadow-sm p-4 space-y-3">
           <h2 className="font-bold text-gray-900">レシプロ本体に反映</h2>
-
-          {/* 件数サマリー */}
-          <div className="grid grid-cols-2 gap-2">
-            <div className="rounded-xl bg-green-50 px-3 py-3 text-center">
-              <p className="text-[11px] text-green-700 font-medium">更新対象</p>
-              <p className="text-2xl font-bold text-green-800">{loading ? "—" : withId.length}</p>
-              <p className="text-[10px] text-green-600 mt-0.5">IDあり → CSV出力</p>
-            </div>
-            <div className="rounded-xl bg-amber-50 px-3 py-3 text-center">
-              <p className="text-[11px] text-amber-700 font-medium">ID未設定</p>
-              <p className="text-2xl font-bold text-amber-800">{loading ? "—" : withoutId.length}</p>
-              <p className="text-[10px] text-amber-600 mt-0.5">採番が必要</p>
-            </div>
+          <div className="text-center py-2">
+            <p className="text-4xl font-bold tabular-nums" style={{ color: "#E85D2C" }}>
+              {loading ? "—" : activeIngredients.length}件
+            </p>
+            <p className="text-sm text-gray-500 mt-1">レシプロに反映できます</p>
           </div>
-
-          {/* 状態別メッセージ */}
-          {!loading && activeIngredients.length === 0 && (
-            <p className="text-xs text-gray-500 text-center py-2">
-              食材を追加してから反映してください
-            </p>
-          )}
-
-          {!loading && withoutId.length > 0 && (
-            <div className="bg-amber-50 rounded-xl p-3 space-y-2">
-              <p className="text-xs font-semibold text-amber-800">
-                ⚠ {withoutId.length}件のマイカタログIDが未設定です
-              </p>
-              <ul className="space-y-1">
-                {withoutId.slice(0, 3).map((item) => (
-                  <li key={item.id} className="text-xs text-amber-700 truncate">
-                    ・{item.ingredientName}
-                  </li>
-                ))}
-                {withoutId.length > 3 && (
-                  <li className="text-xs text-amber-600">他 {withoutId.length - 3}件</li>
-                )}
-              </ul>
-              <Link
-                href="/menu"
-                className="block w-full text-center py-2 rounded-lg border text-xs font-semibold transition-colors hover:bg-amber-100"
-                style={{ color: "#E85D2C", borderColor: "#E85D2C" }}
-              >
-                マイカタログIDを一括採番 →
-              </Link>
-            </div>
-          )}
-
-          {!loading && withId.length > 0 && withoutId.length === 0 && (
-            <p className="text-xs text-green-700 font-medium text-center">
-              {withId.length}件の食材をレシプロに反映できます
-            </p>
-          )}
-
-          {/* CSVアップロードボタン */}
           <button
             type="button"
             onClick={handleCsvDownload}
-            disabled={downloading || loading || withId.length === 0}
+            disabled={downloading || loading || activeIngredients.length === 0}
             className="w-full py-3 rounded-xl text-sm font-bold text-white disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
-            style={{ backgroundColor: withId.length > 0 && !loading && !downloading ? "#E85D2C" : "#9ca3af" }}
+            style={{ backgroundColor: activeIngredients.length > 0 && !loading && !downloading ? "#E85D2C" : "#9ca3af" }}
           >
             {downloading && (
               <span className="h-4 w-4 rounded-full border-2 border-white border-t-transparent animate-spin" />
             )}
             {downloading ? "CSV生成中..." : "📥 CSVをレシプロにアップロード"}
           </button>
-
           {downloadError && (
             <p className="text-xs text-red-500 text-center">{downloadError}</p>
           )}
