@@ -43,8 +43,12 @@ export async function saveStoreInfo(
   uid: string,
   data: Partial<Pick<UserProfile, "storeName" | "address" | "zipCode" | "phone" | "fax" | "personInCharge">>
 ): Promise<void> {
+  // undefined をFirestoreに渡すとエラーになるため除去
+  const clean = Object.fromEntries(
+    Object.entries(data).filter(([, v]) => v !== undefined)
+  );
   await setDoc(doc(db, "users", uid), {
-    ...data,
+    ...clean,
     updatedAt: serverTimestamp(),
   }, { merge: true });
 }
@@ -362,6 +366,21 @@ export async function getRecentPriceHistory(
     where("recordedAt", ">=", since),
     orderBy("recordedAt", "desc"),
     limit(100)
+  );
+  const snap = await getDocs(q);
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() } as PriceHistory));
+}
+
+export async function getPriceHistoryByIngredient(
+  companyId: string,
+  ingredientId: string,
+  maxCount = 30
+): Promise<PriceHistory[]> {
+  const q = query(
+    collection(db, "companies", companyId, "priceHistory"),
+    where("ingredientId", "==", ingredientId),
+    orderBy("recordedAt", "desc"),
+    limit(maxCount)
   );
   const snap = await getDocs(q);
   return snap.docs.map((d) => ({ id: d.id, ...d.data() } as PriceHistory));

@@ -68,8 +68,10 @@ export default function MenuPage() {
       setProfile((prev) => prev ? { ...prev, ...storeForm } : prev);
       setStoreMsg("✅ 保存しました");
       setEditingStore(false);
-    } catch {
-      setStoreMsg("❌ 保存に失敗しました");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error("[saveStoreInfo]", msg, err);
+      setStoreMsg(`❌ 保存に失敗しました: ${msg}`);
     } finally {
       setStoreSaving(false);
     }
