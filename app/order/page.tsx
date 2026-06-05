@@ -96,7 +96,9 @@ export default function OrderPage() {
           style={{ backgroundColor: "#E85D2C" }}
         >
           <div className="flex items-center gap-3">
-            <span className="text-2xl">📋</span>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/icons/icon-history.svg" alt="" width={28} height={28}
+              style={{ filter: "brightness(0) invert(1)" }} />
             <div className="text-left">
               <div className="font-bold text-base text-white">発注履歴から再発注</div>
               <div className="text-xs mt-0.5" style={{ color: "rgba(255,255,255,0.8)" }}>過去の発注内容を再利用</div>
