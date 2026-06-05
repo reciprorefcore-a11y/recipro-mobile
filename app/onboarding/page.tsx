@@ -563,7 +563,7 @@ export default function OnboardingPage() {
     try {
       await completeOnboardingStep(companyId, "menuImport");
       await completeOnboardingStep(companyId, "confirmation");
-      const ids = await Promise.all(
+      await Promise.all(
         s3Products.map((p) =>
           addProduct(companyId, {
             name: p.name,
@@ -576,9 +576,8 @@ export default function OnboardingPage() {
           } as Parameters<typeof addProduct>[1])
         )
       );
-      setS4Count(ids.length);
-      setStep(4);
-      runCostEstimation(ids, s3Products);
+      await completeOnboarding(companyId);
+      router.replace("/");
     } catch {
       setS3Error("保存に失敗しました。再度お試しください");
     } finally {

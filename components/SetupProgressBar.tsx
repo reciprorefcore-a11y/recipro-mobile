@@ -12,14 +12,13 @@ type Props = {
   onImportClick: () => void;
 };
 
-const TOTAL_STEPS = 4;
+const TOTAL_STEPS = 3;
 
 export default function SetupProgressBar({ completedSteps, onImportClick }: Props) {
   const completedCount = [
     completedSteps.ingredientMaster,
     completedSteps.menuImport,
     completedSteps.confirmation,
-    completedSteps.costEstimation ?? false,
   ].filter(Boolean).length;
 
   const [showComplete, setShowComplete] = useState(false);

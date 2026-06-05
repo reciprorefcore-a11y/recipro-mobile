@@ -142,6 +142,7 @@ export type PriceHistory = {
   ingredientId: string;
   ingredientName: string;
   price: number;
+  oldPrice?: number;
   quantity?: number | null;
   source?: "manual" | "receipt_ai" | "receipt_ai_new" | "rollback";
   recordedAt: Timestamp;

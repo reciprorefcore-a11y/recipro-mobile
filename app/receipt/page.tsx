@@ -669,7 +669,7 @@ type ItemUpdate = Partial<
   Pick<MatchedItem, "name" | "unit" | "price" | "quantity" | "supplier" | "isEditing">
 >;
 
-type ValidationErrors = Partial<Record<"name" | "unit" | "price" | "quantity", string>>;
+type EditErrors = Partial<Record<"name" | "unit" | "quantity", string>>;
 
 function ResultItem({
   item,
@@ -682,17 +682,21 @@ function ResultItem({
 }) {
   const [editName, setEditName] = useState(item.name);
   const [editUnit, setEditUnit] = useState(item.unit);
-  const [editPrice, setEditPrice] = useState(String(item.price));
   const [editQuantity, setEditQuantity] = useState(String(item.quantity ?? 1));
   const [editSupplier, setEditSupplier] = useState(item.supplier ?? "");
-  const [errors, setErrors] = useState<ValidationErrors>({});
+  const [newPriceStr, setNewPriceStr] = useState(String(item.price));
+  const [errors, setErrors] = useState<EditErrors>({});
+
+  // Sync price if re-analyzed
+  useEffect(() => {
+    setNewPriceStr(String(item.price));
+  }, [item.price]);
 
   useEffect(() => {
     if (item.isEditing) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setEditName(item.name);
       setEditUnit(item.unit);
-      setEditPrice(String(item.price));
       setEditQuantity(String(item.quantity ?? 1));
       setEditSupplier(item.supplier ?? "");
       setErrors({});
@@ -700,29 +704,82 @@ function ResultItem({
   }, [item.isEditing]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleConfirm = () => {
-    const errs: ValidationErrors = {};
+    const errs: EditErrors = {};
     if (!editName.trim()) errs.name = "食材名は必須です";
     if (!editUnit) errs.unit = "単位は必須です";
     const qty = Number(editQuantity);
     if (!Number.isFinite(qty) || qty < 1) errs.quantity = "1以上の整数";
-    const price = Number(editPrice);
-    if (!Number.isFinite(price) || price < 1) errs.price = "1以上の価格";
     if (Object.keys(errs).length > 0) { setErrors(errs); return; }
     onUpdate({
       name: editName.trim(),
       unit: editUnit,
-      price,
       quantity: Math.floor(qty),
       supplier: editSupplier.trim() || undefined,
       isEditing: false,
     });
   };
 
+  const handleNewPriceBlur = () => {
+    const num = Number(newPriceStr);
+    if (Number.isFinite(num) && num >= 1) {
+      onUpdate({ price: num });
+    } else {
+      setNewPriceStr(String(item.price));
+    }
+  };
+
   const effectiveId = getEffectiveMyCatalogId(item);
   const isNew = !item.matchedIngredient || item.matchType === "new";
   const isMobileId = isMobileIssuedId(effectiveId);
-  const hasChange = !isNew && item.oldPrice !== undefined && item.oldPrice !== item.price;
-  const total = Math.floor(Number(editPrice || 0) * Number(editQuantity || 1));
+
+  // 旧単価 = ingredient.oldPrice, 現在単価 = ingredient.currentPrice (= item.oldPrice in MatchedItem)
+  const prevOldPrice = item.matchedIngredient?.oldPrice;
+  const currentPrice = item.oldPrice; // set to ingredient.currentPrice in toMatchedItem()
+  const parsedNewPrice = Number(newPriceStr);
+  const priceChanged = !isNew && currentPrice !== undefined && Number.isFinite(parsedNewPrice) && parsedNewPrice >= 1 && parsedNewPrice !== currentPrice;
+
+  const priceSection = (
+    <div className="space-y-2 pt-2.5 border-t border-gray-100">
+      <div className="flex items-center justify-between">
+        <span className="text-xs text-gray-400">旧単価</span>
+        <span className="text-sm text-gray-400">
+          {!isNew && prevOldPrice ? `¥${prevOldPrice.toLocaleString()}` : "—"}
+        </span>
+      </div>
+      <div className="flex items-center justify-between">
+        <span className="text-xs text-gray-400">現在単価</span>
+        <span className="text-sm text-gray-500 font-medium">
+          {!isNew && currentPrice ? `¥${currentPrice.toLocaleString()}` : "—"}
+        </span>
+      </div>
+      <div className="flex items-center justify-between gap-3">
+        <span className="text-sm font-bold text-gray-800">新単価</span>
+        <div className="flex items-center gap-1.5">
+          <input
+            type="number"
+            inputMode="numeric"
+            value={newPriceStr}
+            onChange={(e) => setNewPriceStr(e.target.value)}
+            onBlur={handleNewPriceBlur}
+            min="1"
+            className="w-28 rounded-xl border-2 border-primary px-3 py-2 text-[16px] text-right font-bold outline-none focus:ring-2 focus:ring-primary bg-white"
+          />
+          <span className="text-sm text-gray-500 shrink-0">円</span>
+        </div>
+      </div>
+      {priceChanged && (
+        <p className="text-right text-xs font-bold" style={{
+          color: parsedNewPrice > currentPrice! ? "#D93025" : "#0F9D58"
+        }}>
+          {parsedNewPrice > currentPrice! ? "▲" : "▼"}{" "}
+          {Math.abs(((parsedNewPrice - currentPrice!) / currentPrice!) * 100).toFixed(1)}% 変動
+        </p>
+      )}
+      {isNew && (
+        <p className="text-right text-xs text-blue-600 font-medium">新規追加</p>
+      )}
+    </div>
+  );
 
   if (item.isEditing) {
     return (
@@ -750,12 +807,6 @@ function ResultItem({
               min="1" className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-[16px] outline-none focus:ring-2 focus:ring-primary bg-white" />
             {errors.quantity && <p className="text-xs text-red-500 mt-1">{errors.quantity}</p>}
           </div>
-          <div className="flex-1">
-            <label className="block text-xs font-semibold text-gray-600 mb-1">単価 (円)</label>
-            <input type="number" value={editPrice} onChange={(e) => setEditPrice(e.target.value)}
-              min="1" className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-[16px] outline-none focus:ring-2 focus:ring-primary bg-white" />
-            {errors.price && <p className="text-xs text-red-500 mt-1">{errors.price}</p>}
-          </div>
         </div>
         <div>
           <label className="block text-xs font-semibold text-gray-600 mb-1">仕入先 (任意)</label>
@@ -763,10 +814,7 @@ function ResultItem({
             className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-[16px] outline-none focus:ring-2 focus:ring-primary bg-white"
             placeholder="例: 田中精肉店" />
         </div>
-        <p className="text-sm text-gray-500">
-          合計: <span className="font-bold text-gray-800">{total.toLocaleString()}円</span>
-          <span className="text-xs ml-1">({editQuantity || 1} × {Number(editPrice || 0).toLocaleString()}円)</span>
-        </p>
+        {priceSection}
         <div className="flex gap-2">
           <button type="button" onClick={() => onUpdate({ isEditing: false })}
             className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50">
@@ -799,7 +847,7 @@ function ResultItem({
             {effectiveId ? (
               isMobileId ? (
                 <span className="text-xs font-bold text-white bg-blue-500 px-2 py-0.5 rounded-full">
-                  新規追加 (ID: {effectiveId})
+                  新規追加
                 </span>
               ) : (
                 <span className="text-xs font-bold text-white bg-green-600 px-2 py-0.5 rounded-full">
@@ -827,16 +875,7 @@ function ResultItem({
           編集
         </button>
       </div>
-
-      <div className={`rounded-xl px-3 py-2 text-sm font-bold ${
-        isNew ? "text-blue-700 bg-blue-50"
-        : hasChange ? "text-green-700 bg-green-50"
-        : "text-gray-600 bg-gray-100"
-      }`}>
-        {isNew
-          ? `新規 → ${item.price.toLocaleString()}円`
-          : `${item.oldPrice?.toLocaleString() ?? "—"}円 → ${item.price.toLocaleString()}円（${hasChange ? "変更あり" : "変更なし"}）`}
-      </div>
+      {priceSection}
     </article>
   );
 }

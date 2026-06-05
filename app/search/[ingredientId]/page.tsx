@@ -35,8 +35,7 @@ export default function IngredientDetailPage() {
   const [error, setError] = useState("");
   const [suppliers, setSuppliers] = useState<string[]>([]);
 
-  const [currentPrice, setCurrentPrice] = useState("");
-  const [oldPrice, setOldPrice] = useState("");
+  const [newPrice, setNewPrice] = useState("");
   const [supplier, setSupplier] = useState("");
   const [spec, setSpec] = useState("");
   const [unit, setUnit] = useState("kg");
@@ -51,8 +50,7 @@ export default function IngredientDetailPage() {
   const companyId = user?.uid ?? "";
 
   const syncForm = (item: Ingredient) => {
-    setCurrentPrice(String(item.currentPrice));
-    setOldPrice(item.oldPrice == null ? "" : String(item.oldPrice));
+    setNewPrice("");
     setSupplier(item.supplier ?? "");
     setSpec(item.spec ?? "");
     setUnit(item.unit || "kg");
@@ -95,31 +93,36 @@ export default function IngredientDetailPage() {
       return;
     }
 
-    const nextPrice = toRequiredNumber(currentPrice, "現在単価");
-    const nextOldPrice = toOptionalNumber(oldPrice, "旧単価");
-    if (nextPrice.error || nextOldPrice.error) {
-      setError(nextPrice.error || nextOldPrice.error || "");
+    const parsedNewPrice = newPrice.trim() ? Number(newPrice) : null;
+    if (parsedNewPrice !== null && (!Number.isFinite(parsedNewPrice) || parsedNewPrice < 0)) {
+      setError("新単価は0以上の数値で入力してください");
       return;
     }
 
     setSaving(true);
     setError("");
     try {
+      const priceChanged = parsedNewPrice !== null && parsedNewPrice !== ingredient.currentPrice;
+
       await updateIngredient(companyId, ingredient.id, {
         ingredientName: ingredientName.trim(),
-        currentPrice: nextPrice.value,
-        oldPrice: nextOldPrice.value,
+        ...(priceChanged ? {
+          currentPrice: parsedNewPrice!,
+          oldPrice: ingredient.currentPrice,
+        } : {}),
         supplier: supplier.trim(),
         spec: spec.trim(),
         unit,
         isActive,
       });
 
-      if (nextPrice.value !== ingredient.currentPrice) {
+      if (priceChanged) {
         await addPriceHistory(companyId, {
           ingredientId: ingredient.id,
           ingredientName: ingredientName.trim(),
-          price: nextPrice.value,
+          price: parsedNewPrice!,
+          oldPrice: ingredient.currentPrice,
+          source: "manual",
         });
       }
 
@@ -210,8 +213,7 @@ export default function IngredientDetailPage() {
           <MainEditView
             ingredient={ingredient}
             ingredientName={ingredientName}
-            currentPrice={currentPrice}
-            oldPrice={oldPrice}
+            newPrice={newPrice}
             supplier={supplier}
             spec={spec}
             unit={unit}
@@ -220,8 +222,7 @@ export default function IngredientDetailPage() {
             error={error}
             suppliers={suppliers}
             onIngredientNameChange={setIngredientName}
-            onCurrentPriceChange={setCurrentPrice}
-            onOldPriceChange={setOldPrice}
+            onNewPriceChange={setNewPrice}
             onSupplierChange={setSupplier}
             onSpecChange={setSpec}
             onUnitChange={setUnit}
@@ -253,8 +254,7 @@ export default function IngredientDetailPage() {
 function MainEditView({
   ingredient,
   ingredientName,
-  currentPrice,
-  oldPrice,
+  newPrice,
   supplier,
   spec,
   unit,
@@ -263,8 +263,7 @@ function MainEditView({
   error,
   suppliers,
   onIngredientNameChange,
-  onCurrentPriceChange,
-  onOldPriceChange,
+  onNewPriceChange,
   onSupplierChange,
   onSpecChange,
   onUnitChange,
@@ -274,8 +273,7 @@ function MainEditView({
 }: {
   ingredient: Ingredient;
   ingredientName: string;
-  currentPrice: string;
-  oldPrice: string;
+  newPrice: string;
   supplier: string;
   spec: string;
   unit: string;
@@ -284,8 +282,7 @@ function MainEditView({
   error: string;
   suppliers: string[];
   onIngredientNameChange: (value: string) => void;
-  onCurrentPriceChange: (value: string) => void;
-  onOldPriceChange: (value: string) => void;
+  onNewPriceChange: (value: string) => void;
   onSupplierChange: (value: string) => void;
   onSpecChange: (value: string) => void;
   onUnitChange: (value: string) => void;
@@ -312,21 +309,46 @@ function MainEditView({
             onChange={(e) => onIngredientNameChange(e.target.value)}
             required
           />
-          <Input
-            label="現在単価 (円)"
-            type="number"
-            value={currentPrice}
-            onChange={(e) => onCurrentPriceChange(e.target.value)}
-            min="0"
-            required
-          />
-          <Input
-            label="旧単価 (円)"
-            type="number"
-            value={oldPrice}
-            onChange={(e) => onOldPriceChange(e.target.value)}
-            min="0"
-          />
+
+          {/* 価格セクション */}
+          <div className="rounded-xl border border-gray-100 bg-gray-50 px-4 py-3 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-gray-400">旧単価</span>
+              <span className="text-sm text-gray-400 font-medium">
+                {ingredient.oldPrice != null ? `¥${ingredient.oldPrice.toLocaleString()}` : "—"}
+              </span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-gray-500">現在単価</span>
+              <span className="text-sm text-gray-600 font-semibold">
+                ¥{ingredient.currentPrice.toLocaleString()}
+              </span>
+            </div>
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-1">
+              新単価 (円)
+              <span className="ml-1 text-xs text-gray-400 font-normal">— 変更する場合のみ入力</span>
+            </label>
+            <input
+              type="number"
+              inputMode="numeric"
+              value={newPrice}
+              onChange={(e) => onNewPriceChange(e.target.value)}
+              placeholder={`現在: ¥${ingredient.currentPrice.toLocaleString()}`}
+              min="0"
+              className="w-full rounded-xl border-2 border-primary px-4 py-3 text-[16px] font-bold outline-none focus:ring-2 focus:ring-primary bg-white"
+            />
+            {newPrice && Number(newPrice) !== ingredient.currentPrice && Number.isFinite(Number(newPrice)) && (
+              <p className="mt-1 text-xs font-medium" style={{
+                color: Number(newPrice) > ingredient.currentPrice ? "#D93025" : "#0F9D58"
+              }}>
+                {Number(newPrice) > ingredient.currentPrice ? "▲" : "▼"}{" "}
+                {Math.abs(((Number(newPrice) - ingredient.currentPrice) / ingredient.currentPrice) * 100).toFixed(1)}% 変動
+              </p>
+            )}
+          </div>
+
           <div>
             <label className="block text-sm font-medium mb-1">仕入先</label>
             <SupplierSelect
@@ -502,11 +524,6 @@ function toRequiredNumber(value: string, label: string) {
     return { error: `${label}は0以上の数値で入力してください`, value: 0 };
   }
   return { error: "", value: num };
-}
-
-function toOptionalNumber(value: string, label: string) {
-  if (!value.trim()) return { error: "", value: undefined };
-  return toRequiredNumber(value, label);
 }
 
 function getErrorMessage(error: unknown) {

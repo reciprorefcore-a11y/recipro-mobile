@@ -101,8 +101,8 @@ export default function HomePage() {
   const top3 = topChanges.slice(0, 3);
 
   return (
-    <main className="min-h-screen bg-gray-50 flex justify-center">
-      <div className="w-full max-w-[480px] px-4 py-6 space-y-4">
+    <main className="bg-gray-50 flex justify-center" style={{ height: "calc(100svh - 60px)", overflow: "hidden" }}>
+      <div className="w-full max-w-[480px] px-4 py-4 space-y-3 flex flex-col" style={{ height: "100%" }}>
 
         {/* ヘッダー */}
         <div className="flex items-center justify-between">
@@ -157,7 +157,7 @@ export default function HomePage() {
         <UnupdatedIngredientsList />
 
         {/* アクションボタン */}
-        <div className="space-y-3">
+        <div className="space-y-3 mt-auto">
           <button
             onClick={() => router.push("/receipt")}
             className="w-full flex items-center justify-center gap-3 rounded-xl font-bold text-white bg-[#E85D2C] hover:bg-[#C04A1F] transition-colors cursor-pointer"

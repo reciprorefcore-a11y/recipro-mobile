@@ -18,7 +18,6 @@ const STEPS = [
   { key: "ingredientMaster" as const, label: "食材マスター作成", stepNum: 1 },
   { key: "menuImport" as const, label: "メニュー作成", stepNum: 2 },
   { key: "confirmation" as const, label: "商品リスト確認", stepNum: 3 },
-  { key: "costEstimation" as const, label: "原価推定", stepNum: 4 },
 ];
 
 const TOTAL = STEPS.length;
@@ -71,7 +70,7 @@ export default function SetupModal({ isOpen, onClose, completedSteps }: Props) {
             初期設定（あと{remaining}ステップ）
           </h2>
           <p style={{ fontSize: "13px", color: "#666", marginTop: "6px", marginBottom: 0 }}>
-            初期設定を完了すると、損失分析が使えるようになります。
+            初期設定を完了すると、価格変動追跡が使えるようになります。
           </p>
         </div>
 

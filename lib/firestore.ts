@@ -146,6 +146,7 @@ export async function updateIngredientPricesFromReceipt(
       ingredientId: ingredient.id,
       ingredientName: ingredient.ingredientName,
       price: newPrice,
+      oldPrice: ingredient.currentPrice,
       source: "receipt_ai",
       recordedAt: serverTimestamp(),
     });
@@ -389,7 +390,6 @@ export async function completeOnboarding(companyId: string): Promise<void> {
     "completedSteps.ingredientMaster": true,
     "completedSteps.menuImport": true,
     "completedSteps.confirmation": true,
-    "completedSteps.costEstimation": true,
   });
 }
 

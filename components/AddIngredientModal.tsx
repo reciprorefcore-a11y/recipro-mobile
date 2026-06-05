@@ -133,15 +133,30 @@ export default function AddIngredientModal({ isOpen, onClose, onAdd, suppliers =
               ))}
             </select>
           </div>
-          <Input
-            label="初期価格 (円) *"
-            type="number"
-            value={currentPrice}
-            onChange={(e) => setCurrentPrice(e.target.value)}
-            placeholder="例: 580"
-            min="0"
-            required
-          />
+          {/* 価格セクション */}
+          <div className="rounded-xl border border-gray-100 bg-gray-50 px-4 py-3 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-gray-400">旧単価</span>
+              <span className="text-sm text-gray-400">—</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-gray-400">現在単価</span>
+              <span className="text-sm text-gray-400">—</span>
+            </div>
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-1">新単価 (初期価格) (円) *</label>
+            <input
+              type="number"
+              inputMode="numeric"
+              value={currentPrice}
+              onChange={(e) => setCurrentPrice(e.target.value)}
+              placeholder="例: 580"
+              min="0"
+              required
+              className="w-full rounded-xl border-2 border-primary px-4 py-3 text-[16px] font-bold outline-none focus:ring-2 focus:ring-primary bg-white"
+            />
+          </div>
           <div>
             <label className="block text-sm font-medium mb-1">仕入先 (任意)</label>
             <SupplierSelect
