@@ -116,9 +116,9 @@ export default function OnboardingPage() {
   const searchParams = useSearchParams();
   const stepFromUrl = Number(searchParams.get("step"));
 
-  const [step, setStep] = useState<Step>(
-    (stepFromUrl >= 1 && stepFromUrl <= 4 ? stepFromUrl : 1) as Step
-  );
+  // NOTE: URL の ?step=2 は内部コードでは存在するが UI 非表示。2 が来た場合は 3 に補正する。
+  const resolvedStep = stepFromUrl === 2 ? 3 : (stepFromUrl >= 1 && stepFromUrl <= 4 ? stepFromUrl : 1);
+  const [step, setStep] = useState<Step>(resolvedStep as Step);
   const initChecked = useRef(false);
 
   // Step 1 — 複数枚対応
@@ -339,7 +339,7 @@ export default function OnboardingPage() {
     if (!user) return;
     const selected = s1Items.filter((i) => i.selected);
     if (selected.length === 0) {
-      setStep(2);
+      setStep(3);
       return;
     }
     setS1Saving(true);
@@ -689,7 +689,7 @@ export default function OnboardingPage() {
                 </div>
                 <button
                   type="button"
-                  onClick={() => setStep(2)}
+                  onClick={() => setStep(3)}
                   className="w-full min-h-12 rounded-xl font-bold text-white"
                   style={{ backgroundColor: PRIMARY }}
                 >
@@ -823,7 +823,7 @@ export default function OnboardingPage() {
                 {s1Error && <p className="text-sm text-red-600 bg-red-50 rounded-xl p-3">{s1Error}</p>}
                 <button
                   type="button"
-                  onClick={() => setStep(2)}
+                  onClick={() => setStep(3)}
                   className="w-full text-sm text-gray-400 underline pt-1"
                 >
                   伝票がない場合はスキップ
@@ -833,7 +833,8 @@ export default function OnboardingPage() {
           </section>
         )}
 
-        {/* ─── Step 2 ─────────────────────────────────── */}
+        {/* ─── Step 2（メニュー取り込み）─────────────────────────────────── */}
+        {/* 2026/06 UI 非表示。将来再有効化する場合は STEPS 配列への追加と setStep(2) 呼び出しを復活させること。 */}
         {step === 2 && (
           <section className="space-y-4">
             <div className="bg-white rounded-2xl shadow-sm p-4">
@@ -1047,7 +1048,7 @@ export default function OnboardingPage() {
         {step === 3 && (
           <section className="space-y-4">
             <div className="bg-white rounded-2xl shadow-sm p-4">
-              <p className="text-xs font-semibold text-primary">Step 3</p>
+              <p className="text-xs font-semibold text-primary">Step 2</p>
               <h2 className="mt-1 text-lg font-bold text-gray-900">商品リストを確認</h2>
               <p className="mt-1 text-sm text-gray-600">こちらの商品リストでよろしいですか？</p>
             </div>
@@ -1055,9 +1056,9 @@ export default function OnboardingPage() {
             {s3Products.length === 0 ? (
               <div className="bg-white rounded-2xl shadow-sm p-6 text-center space-y-3">
                 <p className="text-gray-500 text-sm">商品が追加されていません</p>
-                <button type="button" onClick={() => setStep(2)}
+                <button type="button" onClick={() => setStep(1)}
                   className="text-sm text-primary underline">
-                  戻ってメニューを追加する
+                  戻る
                 </button>
               </div>
             ) : (
@@ -1145,7 +1146,7 @@ export default function OnboardingPage() {
         {step === 4 && (
           <section className="space-y-4">
             <div className="bg-white rounded-2xl shadow-sm p-4">
-              <p className="text-xs font-semibold text-primary">Step 4</p>
+              <p className="text-xs font-semibold text-primary">Step 3</p>
               <h2 className="mt-1 text-lg font-bold text-gray-900">原価を推定しています</h2>
             </div>
 
@@ -1262,20 +1263,25 @@ function S1ManualForm({
 }
 
 function StepIndicator({ current }: { current: Step }) {
+  // コード上は step 1/2/3/4 だが、step 2（メニュー取り込み）は UI 非表示。
+  // 表示上は 1=食材(code:1), 2=確認(code:3), 3=原価(code:4) の3ステップ。
   const steps = [
-    { n: 1, label: "食材" },
-    { n: 2, label: "メニュー" },
-    { n: 3, label: "確認" },
-    { n: 4, label: "原価" },
-  ] as const;
+    { codeStep: 1 as Step, label: "食材" },
+    { codeStep: 3 as Step, label: "確認" },
+    { codeStep: 4 as Step, label: "原価" },
+  ];
+
+  // 表示上の「現在のステップ番号」: code2はcode3扱い
+  const displayCurrent = current === 2 ? 3 : current;
 
   return (
     <div className="flex items-center gap-1">
-      {steps.map(({ n, label }, i) => {
-        const done = n < current;
-        const active = n === current;
+      {steps.map(({ codeStep, label }, i) => {
+        const done = codeStep < displayCurrent;
+        const active = codeStep === displayCurrent;
+        const displayNum = i + 1;
         return (
-          <div key={n} className="flex items-center gap-1 flex-1">
+          <div key={codeStep} className="flex items-center gap-1 flex-1">
             <div className="flex flex-col items-center flex-1">
               <div
                 className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold"
@@ -1284,7 +1290,7 @@ function StepIndicator({ current }: { current: Step }) {
                   color: done || active ? "white" : "#9CA3AF",
                 }}
               >
-                {done ? "✓" : n}
+                {done ? "✓" : displayNum}
               </div>
               <span className="text-[10px] mt-0.5" style={{ color: active ? PRIMARY : "#9CA3AF" }}>
                 {label}

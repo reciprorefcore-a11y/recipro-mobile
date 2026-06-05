@@ -12,12 +12,12 @@ type Props = {
   onImportClick: () => void;
 };
 
-const TOTAL_STEPS = 3;
+// menuImport は 2026/06 より UI 非表示のため集計から除外。
+const TOTAL_STEPS = 2;
 
 export default function SetupProgressBar({ completedSteps, onImportClick }: Props) {
   const completedCount = [
     completedSteps.ingredientMaster,
-    completedSteps.menuImport,
     completedSteps.confirmation,
   ].filter(Boolean).length;
 

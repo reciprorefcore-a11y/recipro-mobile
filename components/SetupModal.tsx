@@ -16,8 +16,8 @@ type Props = {
 
 const STEPS = [
   { key: "ingredientMaster" as const, label: "食材マスター作成", stepNum: 1 },
-  { key: "menuImport" as const, label: "メニュー作成", stepNum: 2 },
   { key: "confirmation" as const, label: "商品リスト確認", stepNum: 3 },
+  // menuImport（メニュー取り込み）は 2026/06 より UI 非表示。将来再有効化可能。
 ];
 
 const TOTAL = STEPS.length;
