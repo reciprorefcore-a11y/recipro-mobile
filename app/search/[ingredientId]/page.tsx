@@ -16,6 +16,7 @@ import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import Input from "@/components/ui/Input";
 import SupplierSelect from "@/components/SupplierSelect";
+import { toKatakana } from "@/lib/textUtils";
 
 const UNITS = ["kg", "g", "個", "L", "ml", "本", "袋", "ケース", "パック", "枚", "cc"];
 
@@ -142,8 +143,8 @@ export default function IngredientDetailPage() {
     try {
       await updateIngredient(companyId, ingredient.id, {
         ingredientName: ingredientName.trim(),
-        ingredientNameKana: ingredientNameKana.trim(),
-        supplierKana: supplierKana.trim(),
+        ingredientNameKana: toKatakana(ingredientNameKana.trim()),
+        supplierKana: toKatakana(supplierKana.trim()),
         category: category.trim(),
       });
       router.push("/search");
@@ -433,9 +434,11 @@ function AdvancedEditView({
             required
           />
           <Input
-            label="商品名カナ"
+            label="商品名カナ (カタカナ)"
             value={ingredientNameKana}
             onChange={(e) => onIngredientNameKanaChange(e.target.value)}
+            onBlur={(e) => onIngredientNameKanaChange(toKatakana(e.target.value))}
+            placeholder="例: ブタバラスライス"
           />
           <div>
             <label className="block text-sm font-medium mb-1 text-gray-700">マイカタログID</label>
@@ -445,9 +448,11 @@ function AdvancedEditView({
             <p className="mt-1 text-xs text-gray-400">※レシプロ本体との紐付けのため変更できません</p>
           </div>
           <Input
-            label="取引先名カナ"
+            label="取引先名カナ (カタカナ)"
             value={supplierKana}
             onChange={(e) => onSupplierKanaChange(e.target.value)}
+            onBlur={(e) => onSupplierKanaChange(toKatakana(e.target.value))}
+            placeholder="例: タカセブッサン"
           />
           <Input
             label="カテゴリ"

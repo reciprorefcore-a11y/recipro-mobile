@@ -4,6 +4,7 @@ import { useState } from "react";
 import Input from "./ui/Input";
 import Button from "./ui/Button";
 import SupplierSelect from "./SupplierSelect";
+import { toKatakana } from "@/lib/textUtils";
 
 type AddData = {
   ingredientName: string;
@@ -58,7 +59,7 @@ export default function AddIngredientModal({ isOpen, onClose, onAdd, suppliers =
     try {
       await onAdd({
         ingredientName,
-        ingredientNameKana,
+        ingredientNameKana: toKatakana(ingredientNameKana),
         unit,
         currentPrice: Number(currentPrice),
         supplier,
@@ -112,11 +113,12 @@ export default function AddIngredientModal({ isOpen, onClose, onAdd, suppliers =
             required
           />
           <Input
-            label="ひらがな *"
+            label="読みがな (カタカナ) *"
             type="text"
             value={ingredientNameKana}
             onChange={(e) => setIngredientNameKana(e.target.value)}
-            placeholder="例: ぶたばらすらいす"
+            onBlur={(e) => setIngredientNameKana(toKatakana(e.target.value))}
+            placeholder="例: ブタバラスライス"
             required
           />
           <div>

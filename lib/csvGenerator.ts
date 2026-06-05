@@ -1,4 +1,5 @@
 import type { Ingredient, PendingIngredient } from "@/types";
+import { toKatakana } from "@/lib/textUtils";
 
 const COLUMNS = [
   "［マイカタログID］",
@@ -76,8 +77,8 @@ export function buildCsvRows(ingredients: Ingredient[]): string[][] {
       "",
       "",
       "",
-      item.supplierKana ?? "",
-      item.ingredientNameKana ?? "",
+      toKatakana(item.supplierKana),
+      toKatakana(item.ingredientNameKana),
       getInputQuantity(item),
     ]);
 }
@@ -127,8 +128,8 @@ export function generateReceiptCsvString(items: ReceiptCsvInput[]): string {
     "",
     "",
     "",
-    item.supplierKana ?? "",
-    item.ingredientNameKana ?? "",
+    toKatakana(item.supplierKana),
+    toKatakana(item.ingredientNameKana),
     "",
   ]);
   const lines = rows.map((row) => row.map(escapeCell).join(","));
@@ -161,8 +162,8 @@ export function generateNewIngredientsCsvString(pending: PendingIngredient[]): s
     "",
     "",
     "",
-    item.supplierKana ?? "",
-    item.ingredientNameKana ?? "",
+    toKatakana(item.supplierKana),
+    toKatakana(item.ingredientNameKana),
     "",
   ]);
   const lines = rows.map((row) => row.map(escapeCell).join(","));

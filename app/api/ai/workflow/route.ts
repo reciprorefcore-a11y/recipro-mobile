@@ -1,5 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { verifyIdToken } from "@/lib/firebaseAdmin";
+import { toKatakana } from "@/lib/textUtils";
 import type { AiWorkflowResult } from "@/types";
 
 const SYSTEM_PROMPT = `あなたは飲食店の原価管理AIです。
@@ -18,7 +19,7 @@ const SYSTEM_PROMPT = `あなたは飲食店の原価管理AIです。
   "items": [
     {
       "name": "食材名",
-      "ingredientNameKana": "ひらがな読み",
+      "ingredientNameKana": "カタカナ読み（必ずカタカナで出力）",
       "price": 123,
       "unit": "kg",
       "quantity": 1,
@@ -168,7 +169,7 @@ function parseWorkflowResult(text: string): AiWorkflowResult {
           .map((item) => ({
             name: String(item.name),
             ingredientNameKana: item.ingredientNameKana
-              ? String(item.ingredientNameKana)
+              ? toKatakana(String(item.ingredientNameKana))
               : undefined,
             price: Number(item.price),
             unit: String(item.unit || "個"),

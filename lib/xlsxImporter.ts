@@ -1,3 +1,5 @@
+import { toKatakana } from "@/lib/textUtils";
+
 export type XlsxRow = {
   myCatalogId: string;
   ingredientName: string;
@@ -92,13 +94,13 @@ export async function parseReciproXlsx(buffer: Buffer): Promise<XlsxRow[]> {
     results.push({
       myCatalogId,
       ingredientName,
-      ingredientNameKana: str(row, COL.INGREDIENT_NAME_KANA) || undefined,
+      ingredientNameKana: toKatakana(str(row, COL.INGREDIENT_NAME_KANA)) || undefined,
       spec: str(row, COL.SPEC) || undefined,
       unit: str(row, COL.UNIT) || str(row, COL.UNIT2) || "個",
       currentPrice: num(row, COL.CURRENT_PRICE) ?? num(row, COL.PRICE2) ?? 0,
       oldPrice: num(row, COL.OLD_PRICE) ?? num(row, COL.OLD_PRICE2),
       supplier: str(row, COL.SUPPLIER) || undefined,
-      supplierKana: str(row, COL.SUPPLIER_KANA) || undefined,
+      supplierKana: toKatakana(str(row, COL.SUPPLIER_KANA)) || undefined,
       globalCategory: str(row, COL.FOOD_LARGE_NAME) || undefined,
       globalCategoryId: str(row, COL.FOOD_LARGE_CODE) || undefined,
       category: str(row, COL.FOOD_SMALL_NAME) || undefined,
