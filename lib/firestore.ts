@@ -16,7 +16,7 @@ import {
   Timestamp,
 } from "firebase/firestore";
 import { db } from "./firebase";
-import type { GeneralSettings, Ingredient, IngredientWrite, OnboardingSettings, PendingIngredient, PriceHistory, PriceMode, Product, UserProfile } from "@/types";
+import type { GeneralSettings, Ingredient, IngredientWrite, OnboardingSettings, Order, PendingIngredient, PriceHistory, PriceMode, Product, Supplier, UserProfile } from "@/types";
 
 // ─── User ────────────────────────────────────────────────
 
@@ -502,4 +502,30 @@ export async function savePriceMode(
   } else {
     await setDoc(generalSettingsRef(companyId), data);
   }
+}
+
+// ─── Suppliers ────────────────────────────────────────────
+
+export async function getSuppliers(companyId: string): Promise<Supplier[]> {
+  const snap = await getDocs(
+    query(
+      collection(db, "companies", companyId, "suppliers"),
+      orderBy("usageCount", "desc")
+    )
+  );
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() } as Supplier));
+}
+
+// ─── Orders ──────────────────────────────────────────────
+
+export async function saveOrder(
+  companyId: string,
+  order: Omit<Order, "id" | "companyId" | "createdAt">
+): Promise<string> {
+  const ref = await addDoc(collection(db, "companies", companyId, "orders"), {
+    ...order,
+    companyId,
+    createdAt: serverTimestamp(),
+  });
+  return ref.id;
 }

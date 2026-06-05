@@ -268,3 +268,25 @@ export type Recipe = {
   createdAt?: Timestamp;
   updatedAt?: Timestamp;
 };
+
+export type OrderItem = {
+  ingredientId: string;
+  myCatalogId?: string;
+  ingredientName: string;
+  quantity: number;
+  unit: string;
+  note?: string;
+};
+
+export type Order = {
+  id?: string;
+  companyId: string;
+  supplier: { id: string; name: string };
+  items: OrderItem[];
+  deliveryDate?: string;
+  generalNote?: string;
+  status: "draft" | "sent";
+  sentMethod?: "pdf" | "email" | "line" | "url";
+  createdAt?: Timestamp;
+  sentAt?: Timestamp;
+};
