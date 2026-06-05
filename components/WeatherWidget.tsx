@@ -17,9 +17,9 @@ export default function WeatherWidget({ variant = "card" }: Props) {
     const tomorrow = getWeatherInfo(weather.tomorrow.weatherCode);
     return (
       <span className="flex items-center gap-1.5" style={{ fontSize: "12px", color: "#9CA3AF" }}>
-        <span>{today.icon} {weather.today.tempMax}°</span>
+        <span>今日 {today.icon} {weather.today.tempMax}°</span>
         <span style={{ color: "#D1D5DB" }}>·</span>
-        <span>{tomorrow.icon} {weather.tomorrow.tempMax}°</span>
+        <span>明日 {tomorrow.icon} {weather.tomorrow.tempMax}°</span>
       </span>
     );
   }
