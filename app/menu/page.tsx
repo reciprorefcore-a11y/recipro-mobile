@@ -564,18 +564,18 @@ export default function MenuPage() {
             <span className="text-muted text-lg">›</span>
           </Link>
           {[
-            { label: "利用規約", href: "#" },
-            { label: "プライバシーポリシー", href: "#" },
-            { label: "お問い合わせ", href: "#" },
+            { label: "利用規約", href: "/terms" },
+            { label: "プライバシーポリシー", href: "/privacy" },
+            { label: "お問い合わせ", href: "/contact" },
           ].map((item) => (
-            <a
+            <Link
               key={item.label}
               href={item.href}
               className="flex items-center justify-between px-4 py-3.5 hover:bg-gray-50 transition-colors"
             >
               <span className="text-sm font-medium text-text">{item.label}</span>
               <span className="text-muted text-lg">›</span>
-            </a>
+            </Link>
           ))}
         </div>
 

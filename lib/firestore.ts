@@ -49,6 +49,15 @@ export async function saveStoreInfo(
   });
 }
 
+export async function saveConsent(uid: string, termsVersion: string): Promise<void> {
+  await updateDoc(doc(db, "users", uid), {
+    termsAgreedAt: serverTimestamp(),
+    privacyAgreedAt: serverTimestamp(),
+    termsVersion,
+    updatedAt: serverTimestamp(),
+  });
+}
+
 // ─── Ingredients ─────────────────────────────────────────
 
 function ingredientsCol(companyId: string) {

@@ -4,7 +4,9 @@ import Link from "next/link";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { signUp } from "@/lib/auth";
-import { createUserProfile } from "@/lib/firestore";
+import { createUserProfile, saveConsent } from "@/lib/firestore";
+
+const TERMS_VERSION = "1.0";
 import Input from "@/components/ui/Input";
 import Button from "@/components/ui/Button";
 import ReciproLogo from "@/components/ReciproLogo";
@@ -17,6 +19,8 @@ export default function SignupPage() {
   const [storeName, setStoreName] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [agreedTerms, setAgreedTerms] = useState(false);
+  const [agreedPrivacy, setAgreedPrivacy] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -25,6 +29,7 @@ export default function SignupPage() {
     try {
       const { user } = await signUp(email, password);
       await createUserProfile(user.uid, { email, companyName, storeName });
+      await saveConsent(user.uid, TERMS_VERSION);
       router.push("/onboarding");
     } catch (err: unknown) {
       const fe = err as { code?: string };
@@ -82,12 +87,43 @@ export default function SignupPage() {
             placeholder="〇〇店"
             required
           />
+          <div className="space-y-2.5 pt-1">
+            <label className="flex items-start gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={agreedTerms}
+                onChange={(e) => setAgreedTerms(e.target.checked)}
+                className="mt-0.5 h-4 w-4 rounded border-gray-300 accent-orange-500 shrink-0"
+              />
+              <span className="text-sm text-gray-700">
+                <Link href="/terms" target="_blank" className="text-primary underline">
+                  利用規約
+                </Link>
+                に同意します
+              </span>
+            </label>
+            <label className="flex items-start gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={agreedPrivacy}
+                onChange={(e) => setAgreedPrivacy(e.target.checked)}
+                className="mt-0.5 h-4 w-4 rounded border-gray-300 accent-orange-500 shrink-0"
+              />
+              <span className="text-sm text-gray-700">
+                <Link href="/privacy" target="_blank" className="text-primary underline">
+                  プライバシーポリシー
+                </Link>
+                に同意します
+              </span>
+            </label>
+          </div>
+
           {error && (
             <p className="text-sm text-red-500 bg-red-50 rounded-xl p-3">
               {error}
             </p>
           )}
-          <Button type="submit" disabled={loading} className="w-full">
+          <Button type="submit" disabled={loading || !agreedTerms || !agreedPrivacy} className="w-full">
             {loading ? "処理中..." : "登録する"}
           </Button>
         </form>

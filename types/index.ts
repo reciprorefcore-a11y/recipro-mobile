@@ -83,6 +83,9 @@ export type UserProfile = {
   phone?: string;
   fax?: string;
   personInCharge?: string;
+  termsAgreedAt?: Timestamp;
+  privacyAgreedAt?: Timestamp;
+  termsVersion?: string;
   createdAt: Timestamp;
   updatedAt: Timestamp;
 };
