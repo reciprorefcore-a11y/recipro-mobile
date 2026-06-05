@@ -145,7 +145,7 @@ export default function OrderAnalyticsPage() {
               className="px-3 py-1.5 rounded-full text-sm font-medium transition-colors"
               style={
                 selectedPeriod === p.value
-                  ? { backgroundColor: "#C8602A", color: "#fff" }
+                  ? { backgroundColor: "#E85D2C", color: "#fff" }
                   : { backgroundColor: "#fff", color: "#4B5563", border: "1px solid #E5E7EB" }
               }
             >
