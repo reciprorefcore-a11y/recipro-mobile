@@ -5,27 +5,48 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
 import {
   getUserProfile,
-  getProducts,
+  getIngredients,
   getOnboardingSettings,
   initOnboarding,
 } from "@/lib/firestore";
-import { getGrossProfitLoss, formatGrossProfitLoss } from "@/lib/grossProfitLoss";
 import ReciproLogo from "@/components/ReciproLogo";
 import UnupdatedIngredientsList from "@/components/UnupdatedIngredientsList";
-import ImprovementCard from "@/components/ImprovementCard";
 import Card from "@/components/ui/Card";
 import SetupProgressBar from "@/components/SetupProgressBar";
 import SetupModal from "@/components/SetupModal";
-import { IconSearch, IconEditDocumentNew } from "@/components/icons";
-import type { OnboardingSettings, Product } from "@/types";
+import { IconSearch } from "@/components/icons";
+import type { OnboardingSettings, Ingredient } from "@/types";
 
 type CompletedSteps = OnboardingSettings["completedSteps"];
+
+type PriceChangeItem = {
+  id: string;
+  name: string;
+  supplier?: string;
+  oldPrice: number;
+  currentPrice: number;
+  pct: number;
+};
+
+function calcTopChanges(ingredients: Ingredient[]): PriceChangeItem[] {
+  return ingredients
+    .filter((i) => i.isActive && i.oldPrice != null && i.oldPrice > 0)
+    .map((i) => ({
+      id: i.id,
+      name: i.ingredientName,
+      supplier: i.supplier,
+      oldPrice: i.oldPrice!,
+      currentPrice: i.currentPrice,
+      pct: ((i.currentPrice - i.oldPrice!) / i.oldPrice!) * 100,
+    }))
+    .sort((a, b) => b.pct - a.pct);
+}
 
 export default function HomePage() {
   const { user } = useAuth();
   const router = useRouter();
   const [storeName, setStoreName] = useState("");
-  const [products, setProducts] = useState<Product[]>([]);
+  const [topChanges, setTopChanges] = useState<PriceChangeItem[]>([]);
   const [completedSteps, setCompletedSteps] = useState<CompletedSteps | null>(null);
   const [setupModalOpen, setSetupModalOpen] = useState(false);
   const [ready, setReady] = useState(false);
@@ -33,18 +54,16 @@ export default function HomePage() {
   useEffect(() => {
     if (!user) return;
 
-    // storeName は critical path 外で非同期に取得
     getUserProfile(user.uid).then((profile) => {
       if (profile) setStoreName(profile.storeName);
     });
 
-    // オンボーディング判定 + 商品リストを並列取得
     Promise.all([
-      getProducts(user.uid),
+      getIngredients(user.uid),
       getOnboardingSettings(user.uid),
-    ]).then(([prods, onboarding]) => {
+    ]).then(([ingredients, onboarding]) => {
       if (!onboarding) {
-        if (prods.length === 0) {
+        if (ingredients.length === 0) {
           initOnboarding(user.uid).catch(console.error);
           router.replace("/onboarding");
           return;
@@ -54,27 +73,16 @@ export default function HomePage() {
         return;
       }
 
-      setProducts(prods);
-      // onboardingSkipped でも completedSteps を設定してホームにバナーを出す
+      setTopChanges(calcTopChanges(ingredients));
+
       if (onboarding?.completedSteps) {
         setCompletedSteps(onboarding.completedSteps);
       } else if (onboarding && !onboarding.onboardingCompleted) {
-        // completedSteps フィールドがない古いデータへの互換
         setCompletedSteps({ ingredientMaster: false, menuImport: false, confirmation: false });
       }
       setReady(true);
     });
   }, [user, router]);
-
-  const totalLoss = products.reduce((sum, product) => {
-    const { loss } = getGrossProfitLoss(product);
-    return sum + (loss ?? 0);
-  }, 0);
-
-  const { display, color } = formatGrossProfitLoss(totalLoss);
-
-  const colorHex =
-    color === "danger" ? "#D93025" : color === "success" ? "#0F9D58" : "#555555";
 
   if (!ready) {
     return (
@@ -85,27 +93,24 @@ export default function HomePage() {
           <div className="h-20 bg-gray-200 rounded-xl" />
           <div className="h-14 bg-gray-200 rounded-xl" />
           <div className="h-14 bg-gray-200 rounded-xl" />
-          <div className="h-14 bg-gray-200 rounded-xl" />
         </div>
       </main>
     );
   }
 
+  const top3 = topChanges.slice(0, 3);
+
   return (
     <main className="min-h-screen bg-gray-50 flex justify-center">
       <div className="w-full max-w-[480px] px-4 py-6 space-y-4">
 
+        {/* ヘッダー */}
         <div className="flex items-center justify-between">
           <ReciproLogo width={140} />
           <div className="flex items-center gap-3">
             {storeName && (
               <p className="text-sm text-gray-600 font-medium">{storeName}</p>
             )}
-            <div className="relative">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/icons/icon-bell.svg" alt="通知" width={24} height={24} />
-              <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-500 rounded-full" />
-            </div>
           </div>
         </div>
 
@@ -116,29 +121,42 @@ export default function HomePage() {
           />
         )}
 
-        {/* 粗利損失サマリーカード */}
+        {/* 価格変動サマリーカード */}
         <button
-          onClick={() => router.push("/products")}
+          onClick={() => router.push("/price-changes")}
           className="w-full text-left"
         >
-          <Card className={totalLoss > 0 ? "border-l-4 border-[#D93025]" : totalLoss < 0 ? "border-l-4 border-[#0F9D58]" : ""}>
-            <p className="text-sm text-gray-500 mb-1">
-              今月の推定粗利損失 ({products.length}商品合計)
-            </p>
-            <p className="text-3xl font-bold" style={{ color: colorHex }}>
-              {products.length === 0 ? "データなし" : display}
-              {products.length > 0 && (
-                <span className="text-base font-normal text-gray-500 ml-1">/ 月</span>
-              )}
-            </p>
-            {products.length > 0 && (
-              <p className="text-xs text-gray-400 mt-1">タップして商品一覧へ</p>
+          <Card>
+            <p className="text-sm text-gray-500 mb-2 font-medium">今月の食材変動価格推移</p>
+            {top3.length === 0 ? (
+              <p className="text-sm text-gray-400 py-1">
+                価格変動データがまだありません
+              </p>
+            ) : (
+              <div className="space-y-1.5">
+                {top3.map((item, i) => (
+                  <div key={item.id} className="flex items-center justify-between">
+                    <span className="text-sm text-gray-700">
+                      <span className="text-gray-400 mr-1">{i + 1}.</span>
+                      {item.name}
+                    </span>
+                    <span
+                      className="text-sm font-bold"
+                      style={{ color: item.pct > 0 ? "#D93025" : item.pct < 0 ? "#0F9D58" : "#555" }}
+                    >
+                      {item.pct > 0 ? "+" : ""}{item.pct.toFixed(1)}% {item.pct > 0 ? "↑" : item.pct < 0 ? "↓" : ""}
+                    </span>
+                  </div>
+                ))}
+              </div>
             )}
+            <p className="text-xs text-gray-400 mt-2">タップで全リストへ →</p>
           </Card>
         </button>
 
         <UnupdatedIngredientsList />
 
+        {/* アクションボタン */}
         <div className="space-y-3">
           <button
             onClick={() => router.push("/receipt")}
@@ -175,32 +193,7 @@ export default function HomePage() {
             <IconSearch size={24} className="text-primary" />
             食材を検索して更新
           </button>
-
-          <button
-            onClick={() => router.push("/products")}
-            className="w-full flex items-center justify-center gap-3 font-bold bg-white hover:bg-orange-50 transition-colors cursor-pointer"
-            style={{
-              padding: "14px 30px",
-              fontSize: "21px",
-              color: "#E85D2C",
-              border: "2px solid #E85D2C",
-              borderRadius: "12px",
-            }}
-          >
-            商品マスタを管理
-          </button>
         </div>
-
-        {/* 食材追加の常設導線 */}
-        <button
-          onClick={() => router.push("/receipt")}
-          className="w-full flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white py-3 text-sm font-bold text-gray-600 hover:bg-gray-50 transition-colors cursor-pointer"
-        >
-          <IconEditDocumentNew size={18} className="text-gray-500" />
-          仕入伝票を追加して食材を増やす
-        </button>
-
-        <ImprovementCard />
       </div>
 
       {completedSteps && (
