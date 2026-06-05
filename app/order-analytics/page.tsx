@@ -14,31 +14,40 @@ type RankedItem = {
   totalAmount: number;
 };
 
-type MonthOption = {
+type PeriodOption = {
+  value: "week" | "month" | "quarter" | "all";
   label: string;
-  year: number;
-  month: number; // 0-based
 };
 
-function buildMonthOptions(): MonthOption[] {
-  const options: MonthOption[] = [];
+const PERIODS: PeriodOption[] = [
+  { value: "week", label: "今週" },
+  { value: "month", label: "今月" },
+  { value: "quarter", label: "3ヶ月" },
+  { value: "all", label: "全期間" },
+];
+
+function isInPeriod(d: Date, period: PeriodOption["value"]): boolean {
   const now = new Date();
-  for (let i = 0; i < 3; i++) {
-    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    options.push({
-      label: i === 0 ? "今月" : i === 1 ? "先月" : `${d.getMonth() + 1}月`,
-      year: d.getFullYear(),
-      month: d.getMonth(),
-    });
+  if (period === "week") {
+    const cutoff = new Date(now);
+    cutoff.setDate(now.getDate() - 7);
+    return d >= cutoff;
   }
-  return options;
+  if (period === "month") {
+    return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
+  }
+  if (period === "quarter") {
+    const cutoff = new Date(now);
+    cutoff.setMonth(now.getMonth() - 3);
+    return d >= cutoff;
+  }
+  return true; // all
 }
 
 function calcRanking(
   orders: Order[],
   ingredients: Ingredient[],
-  year: number,
-  month: number
+  period: PeriodOption["value"]
 ): RankedItem[] {
   const priceMap = new Map(ingredients.map((i) => [i.id, i.currentPrice ?? 0]));
   const supplierMap = new Map(
@@ -49,7 +58,7 @@ function calcRanking(
   for (const order of orders) {
     const ts = order.createdAt as { toDate?: () => Date } | undefined;
     const d = ts?.toDate?.();
-    if (!d || d.getFullYear() !== year || d.getMonth() !== month) continue;
+    if (!d || !isInPeriod(d, period)) continue;
 
     for (const item of order.items) {
       const price = priceMap.get(item.ingredientId) ?? 0;
@@ -86,8 +95,7 @@ export default function OrderAnalyticsPage() {
   const [ingredients, setIngredients] = useState<Ingredient[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const monthOptions = useMemo(() => buildMonthOptions(), []);
-  const [selectedIdx, setSelectedIdx] = useState(0);
+  const [selectedPeriod, setSelectedPeriod] = useState<PeriodOption["value"]>("month");
 
   useEffect(() => {
     if (!user) return;
@@ -101,10 +109,9 @@ export default function OrderAnalyticsPage() {
     }).catch(() => setLoading(false));
   }, [user]);
 
-  const selected = monthOptions[selectedIdx];
   const ranked = useMemo(
-    () => calcRanking(orders, ingredients, selected.year, selected.month),
-    [orders, ingredients, selected]
+    () => calcRanking(orders, ingredients, selectedPeriod),
+    [orders, ingredients, selectedPeriod]
   );
   const maxAmount = Math.max(...ranked.map((i) => i.totalAmount), 1);
   const totalAmount = ranked.reduce((s, i) => s + i.totalAmount, 0);
@@ -128,23 +135,21 @@ export default function OrderAnalyticsPage() {
           <h1 className="text-base font-semibold text-gray-900 flex-1">発注金額分析</h1>
         </div>
 
-        {/* 月選択タブ */}
-        <div className="flex border-b border-gray-100 px-4 gap-4">
-          {monthOptions.map((opt, idx) => (
+        {/* 期間タブ */}
+        <div className="flex gap-2 px-4 py-3 border-b border-gray-100">
+          {PERIODS.map((p) => (
             <button
-              key={idx}
+              key={p.value}
               type="button"
-              onClick={() => setSelectedIdx(idx)}
-              className="py-3 text-sm font-medium transition-colors relative shrink-0"
-              style={{ color: selectedIdx === idx ? "#E85D2C" : "#9CA3AF" }}
+              onClick={() => setSelectedPeriod(p.value)}
+              className="px-3 py-1.5 rounded-full text-sm font-medium transition-colors"
+              style={
+                selectedPeriod === p.value
+                  ? { backgroundColor: "#C8602A", color: "#fff" }
+                  : { backgroundColor: "#fff", color: "#4B5563", border: "1px solid #E5E7EB" }
+              }
             >
-              {opt.label}
-              {selectedIdx === idx && (
-                <span
-                  className="absolute bottom-0 left-0 right-0 h-0.5 rounded-full"
-                  style={{ backgroundColor: "#E85D2C" }}
-                />
-              )}
+              {p.label}
             </button>
           ))}
         </div>

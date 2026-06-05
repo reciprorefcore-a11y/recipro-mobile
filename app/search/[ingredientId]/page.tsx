@@ -217,7 +217,6 @@ export default function IngredientDetailPage() {
             supplier={supplier}
             spec={spec}
             unit={unit}
-            isActive={isActive}
             saving={saving}
             error={error}
             suppliers={suppliers}
@@ -226,7 +225,6 @@ export default function IngredientDetailPage() {
             onSupplierChange={setSupplier}
             onSpecChange={setSpec}
             onUnitChange={setUnit}
-            onActiveChange={setIsActive}
             onSubmit={handleMainSave}
             onOpenAdvanced={handleOpenAdvanced}
           />
@@ -258,7 +256,6 @@ function MainEditView({
   supplier,
   spec,
   unit,
-  isActive,
   saving,
   error,
   suppliers,
@@ -267,7 +264,6 @@ function MainEditView({
   onSupplierChange,
   onSpecChange,
   onUnitChange,
-  onActiveChange,
   onSubmit,
   onOpenAdvanced,
 }: {
@@ -277,7 +273,6 @@ function MainEditView({
   supplier: string;
   spec: string;
   unit: string;
-  isActive: boolean;
   saving: boolean;
   error: string;
   suppliers: string[];
@@ -286,7 +281,6 @@ function MainEditView({
   onSupplierChange: (value: string) => void;
   onSpecChange: (value: string) => void;
   onUnitChange: (value: string) => void;
-  onActiveChange: (value: boolean) => void;
   onSubmit: (e: React.FormEvent) => void;
   onOpenAdvanced: () => void;
 }) {
@@ -374,21 +368,6 @@ function MainEditView({
               ))}
             </select>
           </div>
-          <label className="flex items-center justify-between rounded-xl border border-gray-200 px-4 py-3">
-            <span>
-              <span className="block text-sm font-medium text-gray-900">有効</span>
-              <span className="block text-xs text-gray-500">
-                無効にするとCSVエクスポートから除外されます
-              </span>
-            </span>
-            <input
-              type="checkbox"
-              checked={isActive}
-              onChange={(e) => onActiveChange(e.target.checked)}
-              className="h-5 w-5 accent-[#E85D2C]"
-            />
-          </label>
-
           {error && (
             <p className="text-sm text-red-500 bg-red-50 rounded-xl p-3">{error}</p>
           )}

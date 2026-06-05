@@ -194,7 +194,12 @@ export default function HomePage() {
                 <p className="text-sm font-semibold text-gray-900">今月の価格変動</p>
                 <p className="text-xs text-gray-400 mt-0.5">食材の値上がり・値下がり</p>
               </div>
-              <span className="text-xs text-gray-400">詳細 ›</span>
+              <span
+                className="text-xs font-medium text-white px-3 py-1.5 rounded-full"
+                style={{ backgroundColor: "#C8602A" }}
+              >
+                詳細
+              </span>
             </div>
 
             {displayChanges.length === 0 ? (
@@ -270,7 +275,12 @@ export default function HomePage() {
                 <p className="text-sm font-semibold text-gray-900">発注金額トップ</p>
                 <p className="text-xs text-gray-400 mt-0.5">今月の累計金額</p>
               </div>
-              <span className="text-xs text-gray-400">詳細 ›</span>
+              <span
+                className="text-xs font-medium text-white px-3 py-1.5 rounded-full"
+                style={{ backgroundColor: "#C8602A" }}
+              >
+                詳細
+              </span>
             </div>
 
             {orderTop3.length === 0 ? (
