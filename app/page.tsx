@@ -138,32 +138,26 @@ export default function HomePage() {
 
   if (!ready) {
     return (
-      <main
-        className="bg-white flex justify-center"
-        style={{ height: "calc(100svh - 60px)", overflow: "hidden" }}
-      >
+      <main className="bg-white flex justify-center">
         <div className="w-full max-w-[480px] px-4 py-5 flex flex-col gap-3 animate-pulse">
-          <div className="flex items-center justify-between shrink-0">
+          <div className="flex items-center justify-between">
             <div className="h-7 bg-gray-100 rounded w-32" />
             <div className="h-8 w-8 bg-gray-100 rounded-full" />
           </div>
-          <div className="flex-1 bg-gray-100 rounded-2xl" />
-          <div className="h-32 bg-gray-100 rounded-2xl shrink-0" />
-          <div className="h-14 bg-gray-100 rounded-xl shrink-0" />
-          <div className="h-12 bg-gray-100 rounded-xl shrink-0" />
+          <div className="h-64 bg-gray-100 rounded-2xl" />
+          <div className="h-32 bg-gray-100 rounded-2xl" />
+          <div className="h-14 bg-gray-100 rounded-xl" />
+          <div className="h-12 bg-gray-100 rounded-xl" />
         </div>
       </main>
     );
   }
 
   return (
-    <main
-      className="bg-white flex justify-center"
-      style={{ height: "calc(100svh - 60px)", overflow: "hidden" }}
-    >
+    <main className="bg-white flex justify-center">
       <div
         className="w-full max-w-[480px] px-4 flex flex-col"
-        style={{ paddingTop: "16px", paddingBottom: "16px", height: "100%", gap: "10px" }}
+        style={{ paddingTop: "16px", paddingBottom: "16px", gap: "10px" }}
       >
         {/* ヘッダー */}
         <div className="flex items-center justify-between shrink-0">
@@ -182,10 +176,10 @@ export default function HomePage() {
         <button
           type="button"
           onClick={() => router.push("/price-changes")}
-          className="w-full text-left flex-1 min-h-0 flex"
+          className="w-full text-left"
         >
           <div
-            className="w-full flex flex-col rounded-2xl border border-gray-100 p-4"
+            className="w-full rounded-2xl border border-gray-100 p-4"
             style={{ boxShadow: "0 1px 3px rgba(0,0,0,0.05)" }}
           >
             {/* カードヘッダー */}
@@ -203,7 +197,7 @@ export default function HomePage() {
             </div>
 
             {displayChanges.length === 0 ? (
-              <div className="flex-1 flex items-center justify-center">
+              <div className="py-6 flex items-center justify-center">
                 <p className="text-sm text-gray-400">価格変動データがまだありません</p>
               </div>
             ) : (
