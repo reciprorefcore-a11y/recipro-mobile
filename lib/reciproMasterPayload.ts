@@ -88,3 +88,39 @@ export async function sendReciproMasterPayload(
     }
   );
 }
+
+export async function sendRawAdminMaster(
+  customerID: string,
+  storeID: string,
+  setData: Record<string, string>[],
+  token: string
+) {
+  return fetch(
+    "https://asia-northeast1-recipro-project-fafd0.cloudfunctions.net/setAdminMaster",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ data: { customerID, storeID, setData } }),
+    }
+  );
+}
+
+export async function fetchAdminMaster(
+  params: { customerID: string; storeID: string },
+  token: string
+) {
+  return fetch(
+    "https://asia-northeast1-recipro-project-fafd0.cloudfunctions.net/getAdminMaster",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ data: params }),
+    }
+  );
+}

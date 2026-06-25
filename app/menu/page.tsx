@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useAuth } from "@/hooks/useAuth";
 import { getUserProfile } from "@/lib/firestore";
 import { signOut } from "@/lib/auth";
+import { getReciproIntegration } from "@/lib/reciproIntegration";
 import type { UserProfile } from "@/types";
 
 type ImportPhase =
@@ -23,10 +24,14 @@ export default function MenuPage() {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [signingOut, setSigningOut] = useState(false);
   const [importPhase, setImportPhase] = useState<ImportPhase>({ name: "idle" });
+  const [reciproStoreName, setReciptoStoreName] = useState<string | null>(null);
 
   useEffect(() => {
     if (!user) return;
     getUserProfile(user.uid).then((p) => setProfile(p));
+    getReciproIntegration(user.uid)
+      .then((data) => setReciptoStoreName(data?.enabled ? data.reciprocalStoreName : null))
+      .catch(() => setReciptoStoreName(null));
   }, [user]);
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -282,18 +287,32 @@ export default function MenuPage() {
         {/* リンクリスト */}
         <div className="bg-white rounded-2xl shadow-sm divide-y divide-gray-100">
           {[
-            { label: "店舗情報", href: "/menu/store-info" },
-            { label: "取引先マスタ", href: "/menu/suppliers" },
-            { label: "利用規約", href: "/terms" },
-            { label: "プライバシーポリシー", href: "/privacy" },
-            { label: "お問い合わせ", href: "/contact" },
+            { label: "店舗情報", href: "/menu/store-info", subtitle: null },
+            {
+              label: "レシプロ連携設定",
+              href: "/integrations/recipro",
+              subtitle: reciproStoreName
+                ? `接続済み: ${reciproStoreName}`
+                : "未接続",
+            },
+            { label: "取引先マスタ", href: "/menu/suppliers", subtitle: null },
+            { label: "利用規約", href: "/terms", subtitle: null },
+            { label: "プライバシーポリシー", href: "/privacy", subtitle: null },
+            { label: "お問い合わせ", href: "/contact", subtitle: null },
           ].map((item) => (
             <Link
               key={item.label}
               href={item.href}
               className="flex items-center justify-between px-4 py-3.5 hover:bg-gray-50 transition-colors"
             >
-              <span className="text-sm font-medium text-gray-800">{item.label}</span>
+              <div>
+                <p className="text-sm font-medium text-gray-800">{item.label}</p>
+                {item.subtitle && (
+                  <p className={`text-xs mt-0.5 ${reciproStoreName && item.href === "/integrations/recipro" ? "text-green-600" : "text-gray-400"}`}>
+                    {item.subtitle}
+                  </p>
+                )}
+              </div>
               <span className="text-gray-400 text-lg">›</span>
             </Link>
           ))}

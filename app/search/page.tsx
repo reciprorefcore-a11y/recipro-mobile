@@ -2,11 +2,14 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
 import { getIngredients, addIngredient } from "@/lib/firestore";
 import { getNextMyCatalogId } from "@/lib/myCatalogIdGenerator";
 import { saveIngredientSnapshot } from "@/lib/ingredientSnapshot";
 import { seedIngredients } from "@/lib/seedData";
+import { getReciproIntegration, RECIPRO_LOCAL_STORE_ID } from "@/lib/reciproIntegration";
+import { buildReciproMasterPayload } from "@/lib/reciproMasterPayload";
 import IngredientCard from "@/components/IngredientCard";
 import AddIngredientModal from "@/components/AddIngredientModal";
 import type { Ingredient, SnapshotItem } from "@/types";
@@ -19,13 +22,17 @@ type AddData = {
   supplier: string;
 };
 
-function todayString(): string {
-  const d = new Date();
-  return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
+
+function getExportErrorMessage(status: number): string {
+  if (status === 401) return "ログインし直してください";
+  if (status === 403) return "レシプロ連携設定が無効です。再設定してください";
+  if (status === 500) return "レシプロとの通信に失敗しました。少し時間をおいて再試行してください";
+  return `反映に失敗しました (${status})`;
 }
 
 export default function SearchPage() {
   const { user } = useAuth();
+  const router = useRouter();
   const [ingredients, setIngredients] = useState<Ingredient[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [supplierFilter, setSupplierFilter] = useState("");
@@ -33,9 +40,11 @@ export default function SearchPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [seeding, setSeeding] = useState(false);
   const [seedMsg, setSeedMsg] = useState("");
-  const [downloading, setDownloading] = useState(false);
-  const [downloadError, setDownloadError] = useState("");
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState("");
+  const [exportCount, setExportCount] = useState(0);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [showNoIntegrationDialog, setShowNoIntegrationDialog] = useState(false);
 
   const companyId = user?.uid ?? "";
 
@@ -100,34 +109,33 @@ export default function SearchPage() {
     await fetchIngredients();
   };
 
-  const handleCsvDownload = async () => {
+  const handleExportToRecipro = async () => {
     if (!user) return;
-    setDownloading(true);
-    setDownloadError("");
+    setExporting(true);
+    setExportError("");
     try {
+      // 1. 連携設定確認
+      const integration = await getReciproIntegration(companyId);
+      if (!integration?.enabled) {
+        setShowNoIntegrationDialog(true);
+        return;
+      }
+
+      // 2. 最新食材取得
       const latest = await getIngredients(companyId);
       setIngredients(latest);
-      const activeWithId = latest.filter((i) => i.isActive);
 
-      const token = await user.getIdToken();
-      const res = await fetch("/api/csv/ingredients", {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!res.ok) throw new Error("CSV生成に失敗しました");
+      // 3. setData 変換（buildReciproMasterPayload が isActive フィルタ済み）
+      const payload = buildReciproMasterPayload({ customerID: "", storeID: "", ingredients: latest });
+      const setData = payload.data.setData;
+      if (setData.length === 0) return;
 
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `ingredient_master_${todayString()}.csv`;
-      a.click();
-      URL.revokeObjectURL(url);
-
-      // スナップショット保存（/history で確認・ロールバック可能に）
-      if (activeWithId.length > 0) {
-        const now = new Date();
-        const desc = `${now.getMonth() + 1}/${now.getDate()} CSVダウンロード`;
-        const snapshotItems: SnapshotItem[] = activeWithId.map((item) => ({
+      // 4. スナップショット保存（/history でロールバック可能）
+      const now = new Date();
+      const desc = `${now.getMonth() + 1}/${now.getDate()} レシプロ反映`;
+      const snapshotItems: SnapshotItem[] = latest
+        .filter((i) => i.isActive)
+        .map((item) => ({
           ingredientId: item.id,
           myCatalogId: item.myCatalogId,
           ingredientName: item.ingredientName,
@@ -136,14 +144,27 @@ export default function SearchPage() {
           supplier: item.supplier,
           isNew: false,
         }));
-        await saveIngredientSnapshot(companyId, user.uid, desc, snapshotItems);
+      await saveIngredientSnapshot(companyId, user.uid, desc, snapshotItems);
+
+      // 5. master-sync API 呼び出し
+      const token = await user.getIdToken();
+      const res = await fetch("/api/recipro/master-sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ storeId: RECIPRO_LOCAL_STORE_ID, setData }),
+      });
+
+      if (!res.ok) {
+        throw new Error(getExportErrorMessage(res.status));
       }
 
+      // 6. 成功
+      setExportCount(setData.length);
       setShowSuccessModal(true);
     } catch (err) {
-      setDownloadError(err instanceof Error ? err.message : "エラーが発生しました");
+      setExportError(err instanceof Error ? err.message : "反映に失敗しました");
     } finally {
-      setDownloading(false);
+      setExporting(false);
     }
   };
 
@@ -234,18 +255,18 @@ export default function SearchPage() {
           </div>
           <button
             type="button"
-            onClick={handleCsvDownload}
-            disabled={downloading || loading || activeIngredients.length === 0}
-            className="w-full py-3 rounded-xl text-sm font-bold text-white disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
-            style={{ backgroundColor: activeIngredients.length > 0 && !loading && !downloading ? "#E85D2C" : "#9ca3af" }}
+            onClick={handleExportToRecipro}
+            disabled={exporting || loading || activeIngredients.length === 0}
+            className="flex items-center justify-center gap-2 text-sm font-semibold disabled:opacity-50 transition-colors border rounded-full px-4 py-2"
+            style={{ color: "#C8602A", borderColor: "#C8602A" }}
           >
-            {downloading && (
-              <span className="h-4 w-4 rounded-full border-2 border-white border-t-transparent animate-spin" />
+            {exporting && (
+              <span className="h-4 w-4 rounded-full border-2 border-t-transparent animate-spin" style={{ borderColor: "#C8602A", borderTopColor: "transparent" }} />
             )}
-            {downloading ? "CSV生成中..." : "📥 CSVをレシプロにアップロード"}
+            {exporting ? "反映中..." : "📤 レシプロへエクスポート"}
           </button>
-          {downloadError && (
-            <p className="text-xs text-red-500 text-center">{downloadError}</p>
+          {exportError && (
+            <p className="text-xs text-red-500 text-center">{exportError}</p>
           )}
         </section>
 
@@ -275,7 +296,7 @@ export default function SearchPage() {
         suppliers={supplierOptions.map(([name]) => name)}
       />
 
-      {/* CSVダウンロード成功モーダル */}
+      {/* 反映成功モーダル */}
       {showSuccessModal && (
         <div
           style={{
@@ -297,45 +318,20 @@ export default function SearchPage() {
               borderRadius: "20px 20px 0 0",
               padding: "24px 20px",
               paddingBottom: "calc(env(safe-area-inset-bottom) + 16px + 60px)",
-              maxHeight: "90vh",
-              overflowY: "auto",
               display: "flex",
               flexDirection: "column",
               gap: "16px",
             }}
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="text-center space-y-1">
-              <div className="text-3xl">✅</div>
-              <h2 className="text-base font-bold text-gray-900">CSVをダウンロードしました</h2>
+            <div className="text-center space-y-2">
+              <div className="text-4xl">✅</div>
+              <h2 className="text-base font-bold text-gray-900">レシプロに反映しました</h2>
+              <p className="text-sm text-gray-500">{exportCount}件の食材マスタを反映しました</p>
             </div>
-
-            <div className="bg-gray-50 rounded-xl p-4 space-y-3">
-              <p className="text-xs font-semibold text-gray-700">次の手順:</p>
-              <ol className="space-y-2">
-                {[
-                  "レシプロを開く",
-                  "食材マスタ → CSVアップロード",
-                  "ダウンロードしたCSVを選択",
-                ].map((step, i) => (
-                  <li key={i} className="flex items-start gap-2 text-sm text-gray-700">
-                    <span className="shrink-0 w-5 h-5 rounded-full bg-primary text-white text-xs font-bold flex items-center justify-center mt-0.5">
-                      {i + 1}
-                    </span>
-                    {step}
-                  </li>
-                ))}
-              </ol>
-            </div>
-
-            <p className="text-xs text-gray-400 text-center">
-              不明な点は管理者にお問い合わせください
-            </p>
-
             <p className="text-xs text-green-600 text-center">
-              この操作は履歴に保存されています（/history で確認できます）
+              この操作は履歴に保存されています
             </p>
-
             <button
               type="button"
               onClick={() => setShowSuccessModal(false)}
@@ -344,6 +340,50 @@ export default function SearchPage() {
             >
               閉じる
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* 未連携ダイアログ */}
+      {showNoIntegrationDialog && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 200,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            backgroundColor: "rgba(0,0,0,0.4)",
+            padding: "16px",
+          }}
+          onClick={() => setShowNoIntegrationDialog(false)}
+        >
+          <div
+            className="bg-white rounded-2xl p-6 w-full max-w-sm space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <p className="text-sm font-semibold text-gray-900">レシプロ連携設定が必要です</p>
+            <p className="text-sm text-gray-600">
+              食材マスタをレシプロへ反映するには、メニュー →「レシプロ連携設定」から初回連携を行ってください。
+            </p>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setShowNoIntegrationDialog(false)}
+                className="flex-1 py-2.5 rounded-xl text-sm font-medium border border-gray-200 text-gray-600"
+              >
+                キャンセル
+              </button>
+              <button
+                type="button"
+                onClick={() => { setShowNoIntegrationDialog(false); router.push("/integrations/recipro"); }}
+                className="flex-1 py-2.5 rounded-xl text-sm font-bold text-white"
+                style={{ backgroundColor: "#E85D2C" }}
+              >
+                連携設定へ
+              </button>
+            </div>
           </div>
         </div>
       )}

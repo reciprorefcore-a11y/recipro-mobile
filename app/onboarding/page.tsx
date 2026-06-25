@@ -833,15 +833,16 @@ export default function OnboardingPage() {
           </section>
         )}
 
-        {/* ─── Step 2（メニュー取り込み）─────────────────────────────────── */}
+        {/* ─── Step 2（レシプロCSV取り込み）─────────────────────────────────── */}
         {/* 2026/06 UI 非表示。将来再有効化する場合は STEPS 配列への追加と setStep(2) 呼び出しを復活させること。 */}
         {step === 2 && (
           <section className="space-y-4">
             <div className="bg-white rounded-2xl shadow-sm p-4">
               <p className="text-xs font-semibold text-primary">Step 2</p>
-              <h2 className="mt-1 text-lg font-bold text-gray-900">メニューを取り込む</h2>
+              <h2 className="mt-1 text-lg font-bold text-gray-900">レシプロから食材を取り込む（任意）</h2>
               <p className="mt-1 text-sm text-gray-600">
-                店舗メニュー表の写真、またはメニューURLを入力してください。
+                レシプロ本体をご利用中の方は、エクスポートしたCSVをアップロードしてください。
+                初めての方はスキップして、伝票撮影で食材マスタを作っていけます。
               </p>
             </div>
 

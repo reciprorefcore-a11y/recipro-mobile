@@ -16,6 +16,18 @@ function snapshotsCol(companyId: string) {
   return collection(db, "companies", companyId, "ingredientSnapshots");
 }
 
+function stripUndefined<T>(value: T): T {
+  if (Array.isArray(value)) return value.map(stripUndefined) as unknown as T;
+  if (value !== null && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .filter(([, v]) => v !== undefined)
+        .map(([k, v]) => [k, stripUndefined(v)])
+    ) as T;
+  }
+  return value;
+}
+
 export async function saveIngredientSnapshot(
   companyId: string,
   userId: string,
@@ -28,7 +40,7 @@ export async function saveIngredientSnapshot(
     createdBy: userId,
     status: "active",
     description,
-    items,
+    items: stripUndefined(items),
   });
   return ref.id;
 }

@@ -516,6 +516,26 @@ export async function promotePendingIngredient(
   return ingredientId;
 }
 
+// ─── Recipro Settings ────────────────────────────────────
+
+export type ReciproSettings = {
+  customerID?: string;
+  storeID?: string;
+};
+
+function reciproSettingsRef(companyId: string) {
+  return doc(db, "companies", companyId, "settings", "recipro");
+}
+
+export async function getReciproSettings(companyId: string): Promise<ReciproSettings | null> {
+  const snap = await getDoc(reciproSettingsRef(companyId));
+  return snap.exists() ? (snap.data() as ReciproSettings) : null;
+}
+
+export async function saveReciproSettings(companyId: string, data: ReciproSettings): Promise<void> {
+  await setDoc(reciproSettingsRef(companyId), data, { merge: true });
+}
+
 // ─── General Settings ─────────────────────────────────────
 
 function generalSettingsRef(companyId: string) {

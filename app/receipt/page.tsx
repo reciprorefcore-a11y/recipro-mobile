@@ -20,7 +20,6 @@ import { saveIngredientSnapshot } from "@/lib/ingredientSnapshot";
 import { compressImage } from "@/lib/imageUtils";
 import { getNextMyCatalogId, isMobileIssuedId } from "@/lib/myCatalogIdGenerator";
 import { findSimilarIngredient } from "@/lib/ingredientMatcher";
-import type { ReceiptCsvInput } from "@/lib/csvGenerator";
 import type {
   AiWorkflowResult,
   DetectedItem,
@@ -349,43 +348,10 @@ export default function ReceiptPage() {
         await saveIngredientSnapshot(sanitizedId, user.uid, desc, allSnapshotItems);
       }
 
-      // CSV生成・ダウンロード
-      const csvItems: ReceiptCsvInput[] = selectedItems
-        .flatMap((item) => {
-          const id = getEffectiveMyCatalogId(item);
-          if (!id) return [];
-          const row: ReceiptCsvInput = {
-            myCatalogId: id,
-            ingredientName: sanitizeText(item.name),
-            ingredientNameKana: item.ingredientNameKana,
-            unit: item.unit,
-            currentPrice: item.price,
-            oldPrice: item.oldPrice,
-            supplier: item.supplier,
-          };
-          return [row];
-        });
-
-      const token = await user.getIdToken();
-      const csvRes = await fetch("/api/csv/receipt", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ items: csvItems }),
-      });
-      if (csvRes.ok) {
-        const blob = await csvRes.blob();
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = `伝票_${todayString()}.csv`;
-        a.click();
-        URL.revokeObjectURL(url);
-      }
-
       const parts: string[] = [];
       if (priceUpdates.length > 0) parts.push(`${priceUpdates.length}件更新`);
       if (newItems.length > 0) parts.push(`${newItems.length}件新規追加`);
-      setDoneMessage((parts.join("、") || "0件") + "・CSVダウンロード完了");
+      setDoneMessage((parts.join("、") || "0件") + " 保存しました");
       setSaving(false);
       window.setTimeout(() => router.push("/search"), 3000);
     } catch (err) {
@@ -573,7 +539,7 @@ export default function ReceiptPage() {
                     <span className="h-5 w-5 rounded-full border-2 border-white border-t-transparent animate-spin" />
                   )}
                   {saving
-                    ? "保存・CSV生成中..."
+                    ? "保存中..."
                     : !allItemsHaveIds
                     ? "ID発行中..."
                     : selectedCount === 0
