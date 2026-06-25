@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Upload } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { getIngredients, addIngredient } from "@/lib/firestore";
 import { getNextMyCatalogId } from "@/lib/myCatalogIdGenerator";
@@ -13,6 +12,7 @@ import { getReciproIntegration, RECIPRO_LOCAL_STORE_ID } from "@/lib/reciproInte
 import { buildReciproMasterPayload } from "@/lib/reciproMasterPayload";
 import IngredientCard from "@/components/IngredientCard";
 import AddIngredientModal from "@/components/AddIngredientModal";
+import ReciproLogo from "@/components/ReciproLogo";
 import type { Ingredient, SnapshotItem } from "@/types";
 
 type AddData = {
@@ -250,21 +250,20 @@ export default function SearchPage() {
         </button>
 
         {/* レシプロ本体に反映 */}
-        <section className="bg-white rounded-2xl shadow-md p-4 space-y-4">
+        <section className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 space-y-4">
           {/* ヘッダー */}
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span className="text-white text-xs font-bold px-2 py-1 rounded-md" style={{ backgroundColor: "#F97316" }}>
-                Recipro
-              </span>
-              <span className="text-sm font-medium text-gray-700">連携サービス</span>
-            </div>
-            <div
-              role="status"
-              className={`flex items-center gap-1 text-xs font-medium ${integrationEnabled ? "text-green-600" : "text-gray-400"}`}
-            >
-              <span className="text-base leading-none">{integrationEnabled ? "●" : "○"}</span>
-              <span>{integrationEnabled ? "接続済" : "未接続"}</span>
+            <ReciproLogo width={80} />
+            <div role="status" className="flex items-center gap-1.5">
+              {integrationEnabled ? (
+                <>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src="/icons/icon-check.svg" alt="" width={18} height={18} />
+                  <span className="text-xs font-medium text-green-600">接続済</span>
+                </>
+              ) : (
+                <span className="text-xs font-medium text-gray-400">未接続</span>
+              )}
             </div>
           </div>
 
@@ -272,16 +271,14 @@ export default function SearchPage() {
           <div className="text-center py-1">
             <div className="flex items-baseline justify-center gap-0.5">
               <span
-                className="text-5xl font-bold tabular-nums leading-none"
-                style={{ color: loading || activeIngredients.length > 0 ? "#E85D2C" : undefined }}
+                className={`text-5xl font-bold tabular-nums leading-none ${!loading && activeIngredients.length === 0 ? "text-gray-400" : ""}`}
+                style={activeIngredients.length > 0 ? { color: "#E85D2C" } : undefined}
               >
-                <span className={loading || activeIngredients.length > 0 ? "" : "text-gray-400"}>
-                  {loading ? "—" : activeIngredients.length}
-                </span>
+                {loading ? "—" : activeIngredients.length}
               </span>
               <span
-                className={`text-2xl font-bold leading-none ${activeIngredients.length === 0 && !loading ? "text-gray-400" : ""}`}
-                style={{ color: activeIngredients.length > 0 ? "#E85D2C" : undefined }}
+                className={`text-2xl font-bold leading-none ${!loading && activeIngredients.length === 0 ? "text-gray-400" : ""}`}
+                style={activeIngredients.length > 0 ? { color: "#E85D2C" } : undefined}
               >
                 件
               </span>
@@ -298,21 +295,25 @@ export default function SearchPage() {
             disabled={exporting || loading || activeIngredients.length === 0}
             aria-label="レシプロへエクスポートする"
             aria-busy={exporting}
-            className="w-full h-14 rounded-xl text-white font-bold shadow-md flex flex-col items-center justify-center gap-0.5 disabled:opacity-50 transition-all active:scale-[0.98] hover:brightness-105"
-            style={{ background: "linear-gradient(to right, #F97316, #FFB75E)" }}
+            className="w-full h-14 rounded-xl text-white font-bold flex items-center justify-center gap-2 disabled:opacity-50 transition-all active:scale-[0.98] hover:opacity-90"
+            style={{ backgroundColor: "#E85D2C" }}
           >
             {exporting ? (
               <>
                 <span className="h-5 w-5 rounded-full border-2 border-white border-t-transparent animate-spin" />
-                <span className="text-sm font-medium mt-0.5">反映中...</span>
+                <span className="text-base">反映中...</span>
               </>
             ) : (
               <>
-                <div className="flex items-center gap-1.5">
-                  <Upload size={18} strokeWidth={2.5} />
-                  <span className="text-base font-bold">レシプロへエクスポート</span>
-                </div>
-                <span className="text-xs" style={{ opacity: 0.75 }}>タップで反映</span>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src="/icons/icon-upload.svg"
+                  alt=""
+                  width={20}
+                  height={20}
+                  style={{ filter: "brightness(0) invert(1)" }}
+                />
+                <span className="text-base font-bold">レシプロへエクスポート</span>
               </>
             )}
           </button>
