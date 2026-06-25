@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { Upload } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { getIngredients, addIngredient } from "@/lib/firestore";
 import { getNextMyCatalogId } from "@/lib/myCatalogIdGenerator";
@@ -45,6 +46,7 @@ export default function SearchPage() {
   const [exportCount, setExportCount] = useState(0);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [showNoIntegrationDialog, setShowNoIntegrationDialog] = useState(false);
+  const [integrationEnabled, setIntegrationEnabled] = useState<boolean | null>(null);
 
   const companyId = user?.uid ?? "";
 
@@ -60,6 +62,9 @@ export default function SearchPage() {
     getIngredients(companyId)
       .then((data) => { if (!ignore) setIngredients(data); })
       .finally(() => { if (!ignore) setLoading(false); });
+    getReciproIntegration(companyId)
+      .then((data) => { if (!ignore) setIntegrationEnabled(data?.enabled ?? false); })
+      .catch(() => { if (!ignore) setIntegrationEnabled(false); });
     return () => { ignore = true; };
   }, [companyId]);
 
@@ -245,26 +250,73 @@ export default function SearchPage() {
         </button>
 
         {/* レシプロ本体に反映 */}
-        <section className="bg-white rounded-2xl shadow-sm p-4 space-y-3">
-          <h2 className="font-bold text-gray-900">レシプロ本体に反映</h2>
-          <div className="text-center py-2">
-            <p className="text-4xl font-bold tabular-nums" style={{ color: "#E85D2C" }}>
-              {loading ? "—" : activeIngredients.length}件
-            </p>
-            <p className="text-sm text-gray-500 mt-1">レシプロに反映できます</p>
+        <section className="bg-white rounded-2xl shadow-md p-4 space-y-4">
+          {/* ヘッダー */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="text-white text-xs font-bold px-2 py-1 rounded-md" style={{ backgroundColor: "#F97316" }}>
+                Recipro
+              </span>
+              <span className="text-sm font-medium text-gray-700">連携サービス</span>
+            </div>
+            <div
+              role="status"
+              className={`flex items-center gap-1 text-xs font-medium ${integrationEnabled ? "text-green-600" : "text-gray-400"}`}
+            >
+              <span className="text-base leading-none">{integrationEnabled ? "●" : "○"}</span>
+              <span>{integrationEnabled ? "接続済" : "未接続"}</span>
+            </div>
           </div>
+
+          {/* 件数 */}
+          <div className="text-center py-1">
+            <div className="flex items-baseline justify-center gap-0.5">
+              <span
+                className="text-5xl font-bold tabular-nums leading-none"
+                style={{ color: loading || activeIngredients.length > 0 ? "#E85D2C" : undefined }}
+              >
+                <span className={loading || activeIngredients.length > 0 ? "" : "text-gray-400"}>
+                  {loading ? "—" : activeIngredients.length}
+                </span>
+              </span>
+              <span
+                className={`text-2xl font-bold leading-none ${activeIngredients.length === 0 && !loading ? "text-gray-400" : ""}`}
+                style={{ color: activeIngredients.length > 0 ? "#E85D2C" : undefined }}
+              >
+                件
+              </span>
+            </div>
+            <p className="text-sm text-gray-500 mt-1.5">
+              {!loading && activeIngredients.length === 0 ? "反映する食材がありません" : "エクスポート対象"}
+            </p>
+          </div>
+
+          {/* CTAボタン */}
           <button
             type="button"
             onClick={handleExportToRecipro}
             disabled={exporting || loading || activeIngredients.length === 0}
-            className="flex items-center justify-center gap-2 text-sm font-semibold disabled:opacity-50 transition-colors border rounded-full px-4 py-2"
-            style={{ color: "#C8602A", borderColor: "#C8602A" }}
+            aria-label="レシプロへエクスポートする"
+            aria-busy={exporting}
+            className="w-full h-14 rounded-xl text-white font-bold shadow-md flex flex-col items-center justify-center gap-0.5 disabled:opacity-50 transition-all active:scale-[0.98] hover:brightness-105"
+            style={{ background: "linear-gradient(to right, #F97316, #FFB75E)" }}
           >
-            {exporting && (
-              <span className="h-4 w-4 rounded-full border-2 border-t-transparent animate-spin" style={{ borderColor: "#C8602A", borderTopColor: "transparent" }} />
+            {exporting ? (
+              <>
+                <span className="h-5 w-5 rounded-full border-2 border-white border-t-transparent animate-spin" />
+                <span className="text-sm font-medium mt-0.5">反映中...</span>
+              </>
+            ) : (
+              <>
+                <div className="flex items-center gap-1.5">
+                  <Upload size={18} strokeWidth={2.5} />
+                  <span className="text-base font-bold">レシプロへエクスポート</span>
+                </div>
+                <span className="text-xs" style={{ opacity: 0.75 }}>タップで反映</span>
+              </>
             )}
-            {exporting ? "反映中..." : "📤 レシプロへエクスポート"}
           </button>
+
           {exportError && (
             <p className="text-xs text-red-500 text-center">{exportError}</p>
           )}
