@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
-import { getSuppliers, updateSupplier, addSupplierToMaster, deleteSupplierFromMaster, backfillSupplierIds } from "@/lib/firestore";
+import { getSuppliers, updateSupplier, addSupplierToMaster, deleteSupplierFromMaster, backfillIngredients } from "@/lib/firestore";
 import type { Supplier } from "@/types";
 
 type EditState = {
@@ -139,16 +139,19 @@ export default function SuppliersPage() {
     setBackfilling(true);
     setBackfillMsg("");
     try {
-      const { updated } = await backfillSupplierIds(user.uid);
-      if (updated === 0) {
-        setBackfillMsg("✅ すべての食材に取引先IDが設定済みです");
+      const { supplierUpdated, idUpdated } = await backfillIngredients(user.uid);
+      if (supplierUpdated === 0 && idUpdated === 0) {
+        setBackfillMsg("✅ すべての食材が整合済みです");
       } else {
         await loadSuppliers(user.uid);
-        setBackfillMsg(`✅ ${updated}件の食材に取引先IDを紐付けました`);
+        const parts: string[] = [];
+        if (supplierUpdated > 0) parts.push(`取引先ID ${supplierUpdated}件`);
+        if (idUpdated > 0) parts.push(`商品ID ${idUpdated}件`);
+        setBackfillMsg(`✅ ${parts.join("・")}を紐付けました`);
       }
     } catch (err: unknown) {
       const m = err instanceof Error ? err.message : String(err);
-      console.error("[backfillSupplierIds]", m);
+      console.error("[backfillIngredients]", m);
       setBackfillMsg("❌ バックフィルに失敗しました");
     } finally {
       setBackfilling(false);
@@ -391,9 +394,9 @@ export default function SuppliersPage() {
 
             {/* バックフィルセクション */}
             <div className="bg-white rounded-2xl shadow-sm p-4 space-y-2 mb-4">
-              <p className="text-xs font-medium text-gray-600">取引先IDの一括紐付け</p>
+              <p className="text-xs font-medium text-gray-600">食材データの一括整合</p>
               <p className="text-xs text-gray-400">
-                既存食材に取引先IDが未設定の場合、一括で紐付けます。通常は自動で処理されます。
+                取引先ID・商品IDが未設定の既存食材に一括で紐付けます。通常は自動で処理されます。
               </p>
               {backfillMsg && (
                 <p className={`text-xs ${backfillMsg.startsWith("❌") ? "text-red-500" : "text-green-600"}`}>
@@ -406,7 +409,7 @@ export default function SuppliersPage() {
                 disabled={backfilling}
                 className="w-full py-2.5 text-sm font-semibold rounded-xl border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-40 transition-colors"
               >
-                {backfilling ? "処理中..." : "取引先IDを一括紐付け"}
+                {backfilling ? "処理中..." : "食材データを一括整合"}
               </button>
             </div>
           </div>

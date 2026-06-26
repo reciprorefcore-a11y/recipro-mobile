@@ -80,7 +80,13 @@ export default function IngredientDetailPage() {
       if (ignore) return;
       setIngredient(data);
       if (data) syncForm(data);
-      setSuppliers(masterList.map((s) => s.name));
+      const masterNames = masterList.map((s) => s.name);
+      // Include ingredient's current supplier even if it's not yet in master
+      const allNames =
+        data?.supplier && !masterNames.includes(data.supplier)
+          ? [...masterNames, data.supplier]
+          : masterNames;
+      setSuppliers(allNames);
     }).finally(() => {
       if (!ignore) setLoading(false);
     });

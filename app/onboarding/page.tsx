@@ -4,7 +4,7 @@ import { ChangeEvent, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
 import {
-  addIngredient,
+  saveIngredientUnified,
   addProduct,
   getProducts,
   updateProduct,
@@ -346,7 +346,7 @@ export default function OnboardingPage() {
     setS1Error("");
     try {
       await Promise.all(selected.map((item, idx) =>
-        addIngredient(companyId, {
+        saveIngredientUnified(companyId, {
           uniqueId: `${companyId.slice(0, 8)}_ob_${Date.now()}_${idx}`,
           ingredientName: item.name,
           ingredientNameKana: item.kana ?? item.name,

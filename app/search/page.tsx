@@ -4,9 +4,8 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
-import { getIngredients, addIngredient, getSuppliers, addSupplierToMaster } from "@/lib/firestore";
+import { getIngredients, saveIngredientUnified, getSuppliers, addSupplierToMaster } from "@/lib/firestore";
 import type { Supplier } from "@/types";
-import { getNextMyCatalogId } from "@/lib/myCatalogIdGenerator";
 import { saveIngredientSnapshot } from "@/lib/ingredientSnapshot";
 import { seedIngredients } from "@/lib/seedData";
 import { getReciproIntegration, RECIPRO_LOCAL_STORE_ID } from "@/lib/reciproIntegration";
@@ -121,8 +120,7 @@ export default function SearchPage() {
     if (!companyId) return;
     const uniqueId = `${companyId.slice(0, 8)}_${Date.now()}`;
     const nameNormalized = data.ingredientName.replace(/[\s　]/g, "");
-    const myCatalogId = await getNextMyCatalogId(companyId);
-    await addIngredient(companyId, { uniqueId, nameNormalized, ...data, myCatalogId });
+    await saveIngredientUnified(companyId, { uniqueId, nameNormalized, ...data });
     await fetchIngredients();
   };
 

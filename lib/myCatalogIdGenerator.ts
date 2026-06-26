@@ -32,6 +32,21 @@ export async function resetCounter(
   await setDoc(counterRef(companyId), { counter: value });
 }
 
+export async function reserveNextMyCatalogIds(
+  companyId: string,
+  count: number
+): Promise<string[]> {
+  if (count <= 0) return [];
+  const ref = counterRef(companyId);
+  const startId = await runTransaction(db, async (tx) => {
+    const snap = await tx.get(ref);
+    const current = snap.exists() ? (snap.data().counter as number) : MOBILE_ID_START;
+    tx.set(ref, { counter: current + count });
+    return current;
+  });
+  return Array.from({ length: count }, (_, i) => String(startId + i));
+}
+
 export function isMobileIssuedId(myCatalogId: string | undefined): boolean {
   if (!myCatalogId) return false;
   const num = parseInt(myCatalogId, 10);

@@ -16,6 +16,7 @@ import {
   Timestamp,
 } from "firebase/firestore";
 import { db } from "./firebase";
+import { getNextMyCatalogId, reserveNextMyCatalogIds } from "./myCatalogIdGenerator";
 import type { GeneralSettings, Ingredient, IngredientWrite, OnboardingSettings, Order, PendingIngredient, PriceHistory, PriceMode, Product, Supplier, UserProfile } from "@/types";
 
 // ─── User ────────────────────────────────────────────────
@@ -103,6 +104,14 @@ export async function addIngredient(
     updatedAt: serverTimestamp(),
   });
   return ref.id;
+}
+
+export async function saveIngredientUnified(
+  companyId: string,
+  data: IngredientWrite
+): Promise<string> {
+  const myCatalogId = data.myCatalogId || (await getNextMyCatalogId(companyId));
+  return addIngredient(companyId, { ...data, myCatalogId });
 }
 
 export async function updateIngredientPrice(
@@ -611,12 +620,26 @@ export async function addSupplierToMaster(
   companyId: string,
   name: string
 ): Promise<string> {
-  const docId = encodeURIComponent(name.trim()).replace(/%/g, "_").slice(0, 50);
+  const trimmed = name.trim();
+  if (!trimmed) return "";
+
+  // Fast path: check by deterministic docId
+  const docId = encodeURIComponent(trimmed).replace(/%/g, "_").slice(0, 50);
   const ref = doc(db, "companies", companyId, "suppliers", docId);
   const snap = await getDoc(ref);
   if (snap.exists()) return snap.id;
+
+  // Fallback: query by name field (handles suppliers created via other encodings)
+  const nameQ = query(
+    collection(db, "companies", companyId, "suppliers"),
+    where("name", "==", trimmed),
+    limit(1)
+  );
+  const nameSnap = await getDocs(nameQ);
+  if (!nameSnap.empty) return nameSnap.docs[0].id;
+
   await setDoc(ref, {
-    name: name.trim(),
+    name: trimmed,
     companyId,
     usageCount: 1,
     createdAt: serverTimestamp(),
@@ -632,47 +655,85 @@ export async function deleteSupplierFromMaster(
   await deleteDoc(doc(db, "companies", companyId, "suppliers", supplierId));
 }
 
-export async function backfillSupplierIds(
+export async function backfillIngredients(
   companyId: string
-): Promise<{ updated: number }> {
+): Promise<{ supplierUpdated: number; idUpdated: number }> {
   const snap = await getDocs(ingredientsCol(companyId));
-  const needsBackfill = snap.docs.filter((d) => {
+
+  // ── supplierId backfill ───────────────────────────────────
+  const needsSupplier = snap.docs.filter((d) => {
     const data = d.data();
     return typeof data.supplier === "string" && data.supplier.trim() && !data.supplierId;
   });
 
-  if (needsBackfill.length === 0) return { updated: 0 };
-
-  // collect unique supplier names
-  const uniqueNames = [...new Set(needsBackfill.map((d) => (d.data().supplier as string).trim()))];
-  const nameToId = new Map<string, string>();
-  for (const name of uniqueNames) {
-    const id = await addSupplierToMaster(companyId, name);
-    nameToId.set(name, id);
-  }
-
-  const BATCH_SIZE = 400;
-  let batch = writeBatch(db);
-  let ops = 0;
-
-  for (const d of needsBackfill) {
-    const supplierName = (d.data().supplier as string).trim();
-    const sid = nameToId.get(supplierName);
-    if (!sid) continue;
-    batch.update(doc(db, "companies", companyId, "ingredients", d.id), {
-      supplierId: sid,
-      updatedAt: serverTimestamp(),
-    });
-    ops++;
-    if (ops >= BATCH_SIZE) {
-      await batch.commit();
-      batch = writeBatch(db);
-      ops = 0;
+  let supplierUpdated = 0;
+  if (needsSupplier.length > 0) {
+    const uniqueNames = [...new Set(needsSupplier.map((d) => (d.data().supplier as string).trim()))];
+    const nameToId = new Map<string, string>();
+    for (const name of uniqueNames) {
+      const id = await addSupplierToMaster(companyId, name);
+      if (id) nameToId.set(name, id);
     }
-  }
-  if (ops > 0) await batch.commit();
 
-  return { updated: needsBackfill.length };
+    const BATCH_SIZE = 400;
+    let batch = writeBatch(db);
+    let ops = 0;
+
+    for (const d of needsSupplier) {
+      const supplierName = (d.data().supplier as string).trim();
+      const sid = nameToId.get(supplierName);
+      if (!sid) continue;
+      batch.update(doc(db, "companies", companyId, "ingredients", d.id), {
+        supplierId: sid,
+        updatedAt: serverTimestamp(),
+      });
+      ops++;
+      supplierUpdated++;
+      if (ops >= BATCH_SIZE) {
+        await batch.commit();
+        batch = writeBatch(db);
+        ops = 0;
+      }
+    }
+    if (ops > 0) await batch.commit();
+  }
+
+  // ── myCatalogId backfill (local ingredients without ID) ──
+  const needsId = snap.docs.filter((d) => !d.data().myCatalogId);
+
+  let idUpdated = 0;
+  if (needsId.length > 0) {
+    const newIds = await reserveNextMyCatalogIds(companyId, needsId.length);
+
+    const BATCH_SIZE = 400;
+    let batch = writeBatch(db);
+    let ops = 0;
+
+    for (let i = 0; i < needsId.length; i++) {
+      batch.update(doc(db, "companies", companyId, "ingredients", needsId[i].id), {
+        myCatalogId: newIds[i],
+        updatedAt: serverTimestamp(),
+      });
+      ops++;
+      idUpdated++;
+      if (ops >= BATCH_SIZE) {
+        await batch.commit();
+        batch = writeBatch(db);
+        ops = 0;
+      }
+    }
+    if (ops > 0) await batch.commit();
+  }
+
+  return { supplierUpdated, idUpdated };
+}
+
+/** @deprecated Use backfillIngredients instead */
+export async function backfillSupplierIds(
+  companyId: string
+): Promise<{ updated: number }> {
+  const { supplierUpdated } = await backfillIngredients(companyId);
+  return { updated: supplierUpdated };
 }
 
 // ─── Orders ──────────────────────────────────────────────
