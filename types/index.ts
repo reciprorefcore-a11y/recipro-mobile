@@ -106,6 +106,7 @@ export type Ingredient = {
   smaregiCode?: string;
   smaregiDept?: string;
   supplier?: string;
+  supplierId?: string;
   supplierKana?: string;
   spec?: string;
   unit: string;
@@ -123,6 +124,8 @@ export type Ingredient = {
   globalCategory?: string;
   globalCategoryId?: string;
   category?: string;
+  source?: "recipro" | "local";
+  lastSyncedFromReciproAt?: Timestamp | null;
   updatedAt?: string;
   isActive: boolean;
   reciproStoreID?: string;
@@ -181,6 +184,10 @@ export type IngredientSnapshot = {
   description: string;
   items: SnapshotItem[];
   rolledBackAt?: Timestamp;
+  pinned?: boolean;
+  pinnedAt?: Timestamp;
+  pinnedBy?: string;
+  type?: "manual" | "before-import";
 };
 
 export type DetectedItem = {

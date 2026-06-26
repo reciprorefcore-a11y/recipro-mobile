@@ -11,9 +11,28 @@ import type { UserProfile } from "@/types";
 
 type ImportPhase =
   | { name: "idle" }
-  | { name: "previewing"; file: File; total: number; suppliers: string[]; supplierCount: number }
+  | { name: "previewing-loading"; file: File }
+  | {
+      name: "previewing";
+      file: File;
+      total: number;
+      toAdd: number;
+      toUpdate: number;
+      unchanged: number;
+      localOnly: number;
+      suppliers: string[];
+      supplierCount: number;
+    }
   | { name: "importing" }
-  | { name: "done"; added: number; updated: number; skipped: number; supplierCount: number; newSupplierCount: number; suppliers: string[] }
+  | {
+      name: "done";
+      added: number;
+      updated: number;
+      unchanged: number;
+      localOnly: number;
+      supplierCount: number;
+      newSupplierCount: number;
+    }
   | { name: "error"; message: string };
 
 export default function MenuPage() {
@@ -39,7 +58,7 @@ export default function MenuPage() {
     e.target.value = "";
     if (!file || !user) return;
 
-    setImportPhase({ name: "previewing", file, total: 0, suppliers: [], supplierCount: 0 });
+    setImportPhase({ name: "previewing-loading", file });
 
     try {
       const token = await user.getIdToken(true);
@@ -52,7 +71,16 @@ export default function MenuPage() {
         headers: { Authorization: `Bearer ${token}` },
         body: formData,
       });
-      const json = await res.json() as { total?: number; suppliers?: string[]; supplierCount?: number; error?: string };
+      const json = await res.json() as {
+        total?: number;
+        toAdd?: number;
+        toUpdate?: number;
+        unchanged?: number;
+        localOnly?: number;
+        suppliers?: string[];
+        supplierCount?: number;
+        error?: string;
+      };
 
       if (!res.ok) {
         setImportPhase({ name: "error", message: json.error ?? "解析に失敗しました" });
@@ -62,6 +90,10 @@ export default function MenuPage() {
         name: "previewing",
         file,
         total: json.total ?? 0,
+        toAdd: json.toAdd ?? 0,
+        toUpdate: json.toUpdate ?? 0,
+        unchanged: json.unchanged ?? 0,
+        localOnly: json.localOnly ?? 0,
         suppliers: json.suppliers ?? [],
         supplierCount: json.supplierCount ?? 0,
       });
@@ -71,7 +103,7 @@ export default function MenuPage() {
   };
 
   const handleImportConfirm = async () => {
-    if (importPhase.name !== "previewing" || !user) return;
+    if ((importPhase.name !== "previewing" && importPhase.name !== "previewing-loading") || !user) return;
     const file = importPhase.file;
     setImportPhase({ name: "importing" });
 
@@ -86,8 +118,12 @@ export default function MenuPage() {
         body: formData,
       });
       const json = await res.json() as {
-        added?: number; updated?: number; skipped?: number;
-        supplierCount?: number; newSupplierCount?: number; suppliers?: string[];
+        added?: number;
+        updated?: number;
+        unchanged?: number;
+        localOnly?: number;
+        supplierCount?: number;
+        newSupplierCount?: number;
         error?: string;
       };
 
@@ -99,10 +135,10 @@ export default function MenuPage() {
         name: "done",
         added: json.added ?? 0,
         updated: json.updated ?? 0,
-        skipped: json.skipped ?? 0,
+        unchanged: json.unchanged ?? 0,
+        localOnly: json.localOnly ?? 0,
         supplierCount: json.supplierCount ?? 0,
         newSupplierCount: json.newSupplierCount ?? 0,
-        suppliers: json.suppliers ?? [],
       });
     } catch {
       setImportPhase({ name: "error", message: "通信エラーが発生しました" });
@@ -165,48 +201,64 @@ export default function MenuPage() {
                   onChange={handleFileSelect}
                 />
               </label>
-              <div className="bg-amber-50 rounded-xl p-3 space-y-1">
-                <p className="text-xs font-semibold text-amber-800">⚠ 注意</p>
-                <p className="text-xs text-amber-700">既存食材は更新されます</p>
-                <p className="text-xs text-amber-700">新規食材は追加されます</p>
+              <div className="bg-gray-50 rounded-xl p-3 space-y-1">
+                <p className="text-xs font-semibold text-gray-600">マージモード</p>
+                <p className="text-xs text-gray-500">既存食材は削除されません。価格が変わった食材のみ更新されます。</p>
               </div>
             </>
           )}
 
-          {importPhase.name === "previewing" && importPhase.total === 0 && (
+          {importPhase.name === "previewing-loading" && (
             <div className="flex items-center justify-center py-6 gap-2">
               <span className="h-4 w-4 rounded-full border-2 border-primary border-t-transparent animate-spin" />
               <p className="text-sm text-gray-500">ファイルを解析中...</p>
             </div>
           )}
 
-          {importPhase.name === "previewing" && importPhase.total > 0 && (
+          {importPhase.name === "previewing" && (
             <>
               <div className="bg-gray-50 rounded-xl p-4 space-y-3">
-                <p className="text-sm font-bold text-gray-900">取り込み確認</p>
+                <p className="text-sm font-bold text-gray-900">差分プレビュー</p>
                 <div className="space-y-1.5">
                   <div className="flex justify-between text-sm">
-                    <span className="text-gray-500">食材データ</span>
+                    <span className="text-gray-500">ファイル件数</span>
                     <span className="font-bold text-gray-900">{importPhase.total.toLocaleString()}件</span>
                   </div>
-                  <div className="flex justify-between text-sm">
+                  <div className="border-t border-gray-200 pt-1.5 space-y-1.5">
+                    {importPhase.toAdd > 0 && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-blue-600">＋ 新規追加</span>
+                        <span className="font-bold text-blue-700">{importPhase.toAdd.toLocaleString()}件</span>
+                      </div>
+                    )}
+                    {importPhase.toUpdate > 0 && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-amber-600">↑ 価格更新</span>
+                        <span className="font-bold text-amber-700">{importPhase.toUpdate.toLocaleString()}件</span>
+                      </div>
+                    )}
+                    {importPhase.unchanged > 0 && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-400">― 変更なし</span>
+                        <span className="text-gray-500">{importPhase.unchanged.toLocaleString()}件</span>
+                      </div>
+                    )}
+                    {importPhase.localOnly > 0 && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-green-600">✓ ローカルのみ（保持）</span>
+                        <span className="text-green-700">{importPhase.localOnly.toLocaleString()}件</span>
+                      </div>
+                    )}
+                  </div>
+                  <div className="border-t border-gray-200 pt-1.5 flex justify-between text-sm">
                     <span className="text-gray-500">取引先</span>
                     <span className="font-bold text-gray-900">{importPhase.supplierCount}社</span>
                   </div>
                 </div>
-                {importPhase.suppliers.length > 0 && (
-                  <div className="space-y-1">
-                    <p className="text-xs text-gray-500 font-medium">取引先一覧:</p>
-                    <ul className="space-y-0.5">
-                      {importPhase.suppliers.slice(0, 8).map((s) => (
-                        <li key={s} className="text-xs text-gray-500">・{s}</li>
-                      ))}
-                      {importPhase.suppliers.length > 8 && (
-                        <li className="text-xs text-gray-400">他 {importPhase.suppliers.length - 8}社</li>
-                      )}
-                    </ul>
-                  </div>
-                )}
+              </div>
+              <div className="bg-amber-50 rounded-xl p-3 space-y-1">
+                <p className="text-xs font-semibold text-amber-800">マージモード</p>
+                <p className="text-xs text-amber-700">既存食材は削除されません。価格が変わった食材のみ更新されます。</p>
               </div>
               <div className="flex gap-2">
                 <button
@@ -237,23 +289,33 @@ export default function MenuPage() {
             <>
               <div className="bg-green-50 rounded-xl p-4 space-y-2">
                 <p className="text-sm font-bold text-green-900">✅ 取り込み完了</p>
-                <div className="space-y-1">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-green-700">新規追加</span>
-                    <span className="font-bold text-green-800">{importPhase.added.toLocaleString()}件</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-green-700">既存更新</span>
-                    <span className="font-bold text-green-800">{importPhase.updated.toLocaleString()}件</span>
-                  </div>
-                  {importPhase.skipped > 0 && (
+                <div className="space-y-1.5">
+                  {importPhase.added > 0 && (
                     <div className="flex justify-between text-sm">
-                      <span className="text-gray-500">スキップ</span>
-                      <span className="text-gray-600">{importPhase.skipped}件</span>
+                      <span className="text-blue-600">＋ 新規追加</span>
+                      <span className="font-bold text-blue-700">{importPhase.added.toLocaleString()}件</span>
                     </div>
                   )}
-                  <div className="border-t border-green-100 pt-1 flex justify-between text-sm">
-                    <span className="text-green-700">取引先登録</span>
+                  {importPhase.updated > 0 && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-amber-600">↑ 価格更新</span>
+                      <span className="font-bold text-amber-700">{importPhase.updated.toLocaleString()}件</span>
+                    </div>
+                  )}
+                  {importPhase.unchanged > 0 && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-400">― 変更なし</span>
+                      <span className="text-gray-500">{importPhase.unchanged.toLocaleString()}件</span>
+                    </div>
+                  )}
+                  {importPhase.localOnly > 0 && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-green-600">✓ ローカルのみ（保持）</span>
+                      <span className="text-green-700">{importPhase.localOnly.toLocaleString()}件</span>
+                    </div>
+                  )}
+                  <div className="border-t border-green-100 pt-1.5 flex justify-between text-sm">
+                    <span className="text-green-700">取引先</span>
                     <span className="font-bold text-green-800">
                       {importPhase.supplierCount}社
                       {importPhase.newSupplierCount > 0 && ` (新規${importPhase.newSupplierCount}社)`}

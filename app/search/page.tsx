@@ -4,7 +4,8 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
-import { getIngredients, addIngredient } from "@/lib/firestore";
+import { getIngredients, addIngredient, getSuppliers, addSupplierToMaster } from "@/lib/firestore";
+import type { Supplier } from "@/types";
 import { getNextMyCatalogId } from "@/lib/myCatalogIdGenerator";
 import { saveIngredientSnapshot } from "@/lib/ingredientSnapshot";
 import { seedIngredients } from "@/lib/seedData";
@@ -49,6 +50,7 @@ export default function SearchPage() {
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [showNoIntegrationDialog, setShowNoIntegrationDialog] = useState(false);
   const [integrationEnabled, setIntegrationEnabled] = useState<boolean | null>(null);
+  const [supplierMaster, setSupplierMaster] = useState<Supplier[]>([]);
 
   const companyId = user?.uid ?? "";
 
@@ -67,11 +69,20 @@ export default function SearchPage() {
     getReciproIntegration(companyId)
       .then((data) => { if (!ignore) setIntegrationEnabled(data?.enabled ?? false); })
       .catch(() => { if (!ignore) setIntegrationEnabled(false); });
+    getSuppliers(companyId)
+      .then((list) => { if (!ignore) setSupplierMaster(list); })
+      .catch(() => {});
     return () => { ignore = true; };
   }, [companyId]);
 
+  const FILTER_NO_SUPPLIER = "__no_supplier__";
+
   const filtered = ingredients.filter((item) => {
-    if (supplierFilter && (item.supplier ?? "") !== supplierFilter) return false;
+    if (supplierFilter === FILTER_NO_SUPPLIER) {
+      if (item.supplier) return false;
+    } else if (supplierFilter && item.supplier !== supplierFilter) {
+      return false;
+    }
     if (!searchQuery) return true;
     const q = searchQuery.toLowerCase();
     return (
@@ -81,13 +92,12 @@ export default function SearchPage() {
     );
   });
 
-  const supplierOptions = Array.from(
-    ingredients.reduce((map, item) => {
-      const s = item.supplier ?? "";
-      if (s) map.set(s, (map.get(s) ?? 0) + 1);
-      return map;
-    }, new Map<string, number>())
-  ).sort((a, b) => b[1] - a[1]);
+  // 取引先マスタ名 + 食材データのみに存在する名前をマージ
+  const masterNames = new Set(supplierMaster.map((s) => s.name));
+  const ingredientOnlyNames = Array.from(
+    new Set(ingredients.map((i) => i.supplier).filter((s): s is string => !!s))
+  ).filter((n) => !masterNames.has(n));
+  const allSupplierNames = [...Array.from(masterNames), ...ingredientOnlyNames];
 
   const activeIngredients = ingredients.filter((i) => i.isActive);
 
@@ -114,6 +124,13 @@ export default function SearchPage() {
     const myCatalogId = await getNextMyCatalogId(companyId);
     await addIngredient(companyId, { uniqueId, nameNormalized, ...data, myCatalogId });
     await fetchIngredients();
+  };
+
+  const handleAddNewSupplier = async (name: string) => {
+    if (!companyId) return;
+    await addSupplierToMaster(companyId, name);
+    const updated = await getSuppliers(companyId);
+    setSupplierMaster(updated);
   };
 
   const handleExportToRecipro = async () => {
@@ -229,16 +246,22 @@ export default function SearchPage() {
               className="w-full rounded-xl border border-gray-200 px-4 py-3 pl-10 text-[16px] outline-none focus:ring-2 focus:ring-primary"
             />
           </div>
-          {supplierOptions.length > 0 && (
+          {(allSupplierNames.length > 0 || ingredients.length > 0) && (
             <select
               value={supplierFilter}
               onChange={(e) => setSupplierFilter(e.target.value)}
               className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-[16px] outline-none focus:ring-2 focus:ring-primary text-gray-700"
             >
-              <option value="">業者: 全て ({ingredients.filter(i => i.supplier).length > 0 ? ingredients.length : 0}件)</option>
-              {supplierOptions.map(([name, count]) => (
-                <option key={name} value={name}>{name}（{count}件）</option>
-              ))}
+              <option value="">取引先：全て ({ingredients.length}件)</option>
+              {allSupplierNames.map((name) => {
+                const count = ingredients.filter((i) => i.supplier === name).length;
+                return (
+                  <option key={name} value={name}>{name}（{count}件）</option>
+                );
+              })}
+              <option value={FILTER_NO_SUPPLIER}>
+                取引先未登録（{ingredients.filter((i) => !i.supplier).length}件）
+              </option>
             </select>
           )}
         </div>
@@ -348,7 +371,8 @@ export default function SearchPage() {
         isOpen={modalOpen}
         onClose={() => setModalOpen(false)}
         onAdd={handleAdd}
-        suppliers={supplierOptions.map(([name]) => name)}
+        suppliers={allSupplierNames}
+        onAddNewSupplier={handleAddNewSupplier}
       />
 
       {/* 反映成功モーダル */}

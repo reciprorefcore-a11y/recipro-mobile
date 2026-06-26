@@ -54,8 +54,15 @@ function parseCsvText(text: string): XlsxRow[] {
 }
 
 function makeSupplierDocId(name: string): string {
-  return encodeURIComponent(name).replace(/%/g, "_").slice(0, 50);
+  return encodeURIComponent(name.trim()).replace(/%/g, "_").slice(0, 50);
 }
+
+type ExistingItem = {
+  id: string;
+  currentPrice: number;
+  ingredientName: string;
+  supplier?: string;
+};
 
 export async function POST(request: Request) {
   // ── 認証チェック ──────────────────────────────────────────
@@ -131,19 +138,7 @@ export async function POST(request: Request) {
   }
   const suppliers = [...supplierMap.entries()].map(([name, nameKana]) => ({ name, nameKana }));
 
-  // ── プレビューモード (保存なし) ──────────────────────────
-  if (preview) {
-    return Response.json({
-      total: rows.length,
-      supplierCount: suppliers.length,
-      suppliers: suppliers.map((s) => s.name),
-    });
-  }
-
-  // ── Firestoreへ保存 ───────────────────────────────────────
-  // ※ Firestore 操作は全体を try-catch で囲む
-  //   例外が漏れると Next.js が HTML 500 を返し、クライアントが
-  //   JSON parse に失敗して「通信エラー」と表示されてしまう
+  // ── Firestore 接続 ────────────────────────────────────────
   let db: FirebaseFirestore.Firestore;
   try {
     db = getAdminDb();
@@ -155,40 +150,122 @@ export async function POST(request: Request) {
     );
   }
 
+  const companyId = user.uid;
+  const ingredientsCol = db.collection("companies").doc(companyId).collection("ingredients");
+
+  // ── 既存食材を取得してdiff計算 ────────────────────────────
+  let existingByMyCatalogId: Map<string, ExistingItem>;
+  let totalExisting: number;
+
   try {
-    const companyId = user.uid;
-    const ingredientsCol = db
-      .collection("companies")
-      .doc(companyId)
-      .collection("ingredients");
-    const suppliersCol = db
-      .collection("companies")
-      .doc(companyId)
-      .collection("suppliers");
-
-    // 既存データを一括取得（並列）
-    const [existingSnap, existingSupplierSnap] = await Promise.all([
-      ingredientsCol.get(),
-      suppliersCol.get(),
-    ]);
-
-    const existingByMyCatalogId = new Map<string, string>();
+    const existingSnap = await ingredientsCol.get();
+    existingByMyCatalogId = new Map();
     for (const d of existingSnap.docs) {
-      const mid = d.data().myCatalogId as string | undefined;
-      if (mid) existingByMyCatalogId.set(mid, d.id);
+      const data = d.data();
+      const mid = data.myCatalogId as string | undefined;
+      if (mid) {
+        existingByMyCatalogId.set(mid, {
+          id: d.id,
+          currentPrice: typeof data.currentPrice === "number" ? data.currentPrice : 0,
+          ingredientName: typeof data.ingredientName === "string" ? data.ingredientName : "",
+          supplier: typeof data.supplier === "string" ? data.supplier : undefined,
+        });
+      }
     }
+    totalExisting = existingSnap.size;
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error("[import/ingredients] fetch existing error:", msg);
+    return Response.json({ error: `既存データの取得に失敗しました: ${msg}` }, { status: 500 });
+  }
+
+  // diff計算
+  const importIds = new Set<string>();
+  let toAdd = 0, toUpdate = 0, unchanged = 0;
+
+  for (const row of rows) {
+    if (!row.myCatalogId || !row.ingredientName) continue;
+    importIds.add(row.myCatalogId);
+    const existing = existingByMyCatalogId.get(row.myCatalogId);
+    if (!existing) {
+      toAdd++;
+    } else if (existing.currentPrice !== row.currentPrice) {
+      toUpdate++;
+    } else {
+      unchanged++;
+    }
+  }
+
+  // localOnly: 既存でimportにマッチしない食材（削除されない）
+  const localOnly = totalExisting - (toUpdate + unchanged);
+
+  // ── プレビューモード (保存なし) ──────────────────────────
+  if (preview) {
+    return Response.json({
+      total: rows.length,
+      toAdd,
+      toUpdate,
+      unchanged,
+      localOnly: Math.max(0, localOnly),
+      supplierCount: suppliers.length,
+      suppliers: suppliers.map((s) => s.name),
+    });
+  }
+
+  // ── 取り込み実行 ──────────────────────────────────────────
+  try {
+    const suppliersCol = db.collection("companies").doc(companyId).collection("suppliers");
+    const [existingSupplierSnap] = await Promise.all([suppliersCol.get()]);
 
     const existingSupplierNames = new Set(
       existingSupplierSnap.docs.map((d) => d.data().name as string)
     );
 
-    let added = 0, updated = 0, skipped = 0;
     const now = FieldValue.serverTimestamp();
 
-    // ── 食材をバッチ書き込み (Firestoreの上限は500ops/batch) ──
+    // ── スナップショット保存（更新前の価格を記録）──────────
+    const snapshotItems: Array<{
+      ingredientId: string;
+      ingredientName: string;
+      oldPrice: number;
+      newPrice: number;
+      supplier?: string;
+      isNew: boolean;
+    }> = [];
+
+    for (const row of rows) {
+      if (!row.myCatalogId || !row.ingredientName) continue;
+      const existing = existingByMyCatalogId.get(row.myCatalogId);
+      if (existing && existing.currentPrice !== row.currentPrice) {
+        snapshotItems.push({
+          ingredientId: existing.id,
+          ingredientName: existing.ingredientName,
+          oldPrice: existing.currentPrice,
+          newPrice: row.currentPrice,
+          ...(existing.supplier ? { supplier: existing.supplier } : {}),
+          isNew: false,
+        });
+      }
+    }
+
+    if (snapshotItems.length > 0) {
+      const snapshotRef = db.collection("companies").doc(companyId).collection("ingredientSnapshots").doc();
+      await snapshotRef.set({
+        companyId,
+        createdAt: now,
+        createdBy: companyId,
+        status: "active",
+        type: "before-import",
+        description: `レシプロ取り込み: ${toAdd}件追加 ${toUpdate}件更新`,
+        items: snapshotItems,
+      });
+    }
+
+    // ── 食材バッチ書き込み ────────────────────────────────
     const BATCH_SIZE = 400;
     let batch = db.batch();
     let opsInBatch = 0;
+    let added = 0, updated = 0, skipped = 0, actualUnchanged = 0;
 
     const flushBatch = async () => {
       if (opsInBatch > 0) {
@@ -201,34 +278,61 @@ export async function POST(request: Request) {
     for (const row of rows) {
       if (!row.myCatalogId || !row.ingredientName) { skipped++; continue; }
 
-      const data: Record<string, unknown> = {
-        myCatalogId: row.myCatalogId,
-        ingredientName: row.ingredientName,
-        companyId,
-        ...(row.ingredientNameKana && { ingredientNameKana: row.ingredientNameKana }),
-        ...(row.smaregiCode && { smaregiCode: row.smaregiCode }),
-        ...(row.spec && { spec: row.spec }),
-        unit: row.unit,
-        currentPrice: row.currentPrice,
-        ...(row.oldPrice !== undefined && { oldPrice: row.oldPrice }),
-        ...(row.supplier && { supplier: row.supplier }),
-        ...(row.supplierKana && { supplierKana: row.supplierKana }),
-        ...(row.globalCategory && { globalCategory: row.globalCategory }),
-        ...(row.globalCategoryId && { globalCategoryId: row.globalCategoryId }),
-        ...(row.category && { category: row.category }),
-        ...(row.irisu && { irisu: row.irisu }),
-        isActive: true,
-        updatedAt: now,
-      };
+      const existing = existingByMyCatalogId.get(row.myCatalogId);
 
-      const existingId = existingByMyCatalogId.get(row.myCatalogId);
-      if (existingId) {
-        batch.update(ingredientsCol.doc(existingId), data);
+      if (existing && existing.currentPrice === row.currentPrice) {
+        // 価格変化なし — Firestoreを更新せずスキップ
+        actualUnchanged++;
+        continue;
+      }
+
+      const supplierDocId = row.supplier ? makeSupplierDocId(row.supplier) : undefined;
+
+      if (existing) {
+        // 更新: categoryは保持（上書きしない）、source/lastSyncedFromReciproAtを設定
+        batch.update(ingredientsCol.doc(existing.id), {
+          ingredientName: row.ingredientName,
+          ...(row.ingredientNameKana && { ingredientNameKana: row.ingredientNameKana }),
+          ...(row.smaregiCode && { smaregiCode: row.smaregiCode }),
+          ...(row.spec && { spec: row.spec }),
+          unit: row.unit,
+          currentPrice: row.currentPrice,
+          oldPrice: existing.currentPrice,
+          ...(row.supplier && { supplier: row.supplier }),
+          ...(supplierDocId && { supplierId: supplierDocId }),
+          ...(row.supplierKana && { supplierKana: row.supplierKana }),
+          ...(row.irisu && { irisu: row.irisu }),
+          source: "recipro",
+          lastSyncedFromReciproAt: now,
+          isActive: true,
+          updatedAt: now,
+        });
         updated++;
       } else {
+        // 新規追加
         const uniqueId = `${companyId.slice(0, 8)}_recipro_${row.myCatalogId}`;
         const newRef = ingredientsCol.doc();
-        batch.set(newRef, { ...data, uniqueId, createdAt: now });
+        batch.set(newRef, {
+          myCatalogId: row.myCatalogId,
+          ingredientName: row.ingredientName,
+          companyId,
+          ...(row.ingredientNameKana && { ingredientNameKana: row.ingredientNameKana }),
+          ...(row.smaregiCode && { smaregiCode: row.smaregiCode }),
+          ...(row.spec && { spec: row.spec }),
+          unit: row.unit,
+          currentPrice: row.currentPrice,
+          ...(row.oldPrice !== undefined && { oldPrice: row.oldPrice }),
+          ...(row.supplier && { supplier: row.supplier }),
+          ...(supplierDocId && { supplierId: supplierDocId }),
+          ...(row.supplierKana && { supplierKana: row.supplierKana }),
+          ...(row.irisu && { irisu: row.irisu }),
+          source: "recipro",
+          lastSyncedFromReciproAt: now,
+          uniqueId,
+          isActive: true,
+          createdAt: now,
+          updatedAt: now,
+        });
         added++;
       }
 
@@ -239,7 +343,7 @@ export async function POST(request: Request) {
     }
     await flushBatch();
 
-    // ── 取引先マスタをバッチ upsert ──────────────────────────
+    // ── 取引先マスタ upsert ──────────────────────────────
     const newSuppliers: string[] = [];
     const supplierBatch = db.batch();
 
@@ -269,13 +373,15 @@ export async function POST(request: Request) {
     }
 
     console.log(
-      `[import/ingredients] uid=${companyId} added=${added} updated=${updated} skipped=${skipped} suppliers=${suppliers.length}`
+      `[import/ingredients] uid=${companyId} added=${added} updated=${updated} unchanged=${actualUnchanged} skipped=${skipped}`
     );
 
     return Response.json({
       added,
       updated,
+      unchanged: actualUnchanged,
       skipped,
+      localOnly: Math.max(0, localOnly),
       supplierCount: suppliers.length,
       newSupplierCount: newSuppliers.length,
       suppliers: suppliers.map((s) => s.name),

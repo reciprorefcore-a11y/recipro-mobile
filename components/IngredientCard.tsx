@@ -28,11 +28,16 @@ export default function IngredientCard({ ingredient }: Props) {
         </p>
       </div>
       <div className="flex items-center justify-between mt-1.5">
-        {ingredient.supplier ? (
-          <p className="text-xs text-gray-400">{ingredient.supplier}</p>
-        ) : (
-          <span />
-        )}
+        <div className="flex items-center gap-1.5 min-w-0">
+          {ingredient.supplier && (
+            <p className="text-xs text-gray-400 truncate">{ingredient.supplier}</p>
+          )}
+          {ingredient.source === "local" && (
+            <span className="shrink-0 text-[10px] font-medium text-blue-500 bg-blue-50 rounded px-1.5 py-0.5">
+              モバイル登録
+            </span>
+          )}
+        </div>
         <p
           className={`text-xs font-medium flex items-center gap-1 ${
             isWarning ? "text-warning" : isFresh ? "text-success" : "text-gray-400"

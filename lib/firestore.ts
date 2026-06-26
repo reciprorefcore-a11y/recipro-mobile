@@ -89,9 +89,15 @@ export async function addIngredient(
   companyId: string,
   data: IngredientWrite
 ): Promise<string> {
+  let supplierId = data.supplierId;
+  if (!supplierId && data.supplier?.trim()) {
+    supplierId = await addSupplierToMaster(companyId, data.supplier.trim());
+  }
   const ref = await addDoc(ingredientsCol(companyId), {
     ...data,
+    ...(supplierId && { supplierId }),
     companyId,
+    source: data.source ?? "local",
     isActive: data.isActive ?? true,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
@@ -125,6 +131,7 @@ export async function updateIngredient(
       | "ingredientNameKana"
       | "myCatalogId"
       | "supplier"
+      | "supplierId"
       | "supplierKana"
       | "spec"
       | "unit"
@@ -135,8 +142,13 @@ export async function updateIngredient(
     >
   >
 ): Promise<void> {
+  let extra: Record<string, unknown> = {};
+  if (data.supplier?.trim() && !data.supplierId) {
+    extra.supplierId = await addSupplierToMaster(companyId, data.supplier.trim());
+  }
   await updateDoc(doc(db, "companies", companyId, "ingredients", ingredientId), {
     ...toFirestoreUpdateData(data),
+    ...extra,
     updatedAt: serverTimestamp(),
   });
 }
@@ -193,6 +205,7 @@ function normalizeIngredient(
     smaregiCode: optionalString(data.smaregiCode),
     smaregiDept: optionalString(data.smaregiDept),
     supplier: optionalString(data.supplier),
+    supplierId: optionalString(data.supplierId),
     supplierKana: optionalString(data.supplierKana),
     spec: optionalString(data.spec),
     unit: stringValue(data.unit) || "個",
@@ -210,6 +223,13 @@ function normalizeIngredient(
     globalCategory: optionalString(data.globalCategory),
     globalCategoryId: optionalString(data.globalCategoryId),
     category: optionalString(data.category),
+    source: optionalString(data.source) as "recipro" | "local" | undefined,
+    lastSyncedFromReciproAt:
+      data.lastSyncedFromReciproAt instanceof Timestamp
+        ? data.lastSyncedFromReciproAt
+        : data.lastSyncedFromReciproAt === null
+        ? null
+        : undefined,
     updatedAt: timestampToIso(data.updatedAt),
     isActive: data.isActive !== false,
   };
@@ -585,6 +605,74 @@ export async function updateSupplier(
     { ...clean, updatedAt: serverTimestamp() },
     { merge: true }
   );
+}
+
+export async function addSupplierToMaster(
+  companyId: string,
+  name: string
+): Promise<string> {
+  const docId = encodeURIComponent(name.trim()).replace(/%/g, "_").slice(0, 50);
+  const ref = doc(db, "companies", companyId, "suppliers", docId);
+  const snap = await getDoc(ref);
+  if (snap.exists()) return snap.id;
+  await setDoc(ref, {
+    name: name.trim(),
+    companyId,
+    usageCount: 1,
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  });
+  return docId;
+}
+
+export async function deleteSupplierFromMaster(
+  companyId: string,
+  supplierId: string
+): Promise<void> {
+  await deleteDoc(doc(db, "companies", companyId, "suppliers", supplierId));
+}
+
+export async function backfillSupplierIds(
+  companyId: string
+): Promise<{ updated: number }> {
+  const snap = await getDocs(ingredientsCol(companyId));
+  const needsBackfill = snap.docs.filter((d) => {
+    const data = d.data();
+    return typeof data.supplier === "string" && data.supplier.trim() && !data.supplierId;
+  });
+
+  if (needsBackfill.length === 0) return { updated: 0 };
+
+  // collect unique supplier names
+  const uniqueNames = [...new Set(needsBackfill.map((d) => (d.data().supplier as string).trim()))];
+  const nameToId = new Map<string, string>();
+  for (const name of uniqueNames) {
+    const id = await addSupplierToMaster(companyId, name);
+    nameToId.set(name, id);
+  }
+
+  const BATCH_SIZE = 400;
+  let batch = writeBatch(db);
+  let ops = 0;
+
+  for (const d of needsBackfill) {
+    const supplierName = (d.data().supplier as string).trim();
+    const sid = nameToId.get(supplierName);
+    if (!sid) continue;
+    batch.update(doc(db, "companies", companyId, "ingredients", d.id), {
+      supplierId: sid,
+      updatedAt: serverTimestamp(),
+    });
+    ops++;
+    if (ops >= BATCH_SIZE) {
+      await batch.commit();
+      batch = writeBatch(db);
+      ops = 0;
+    }
+  }
+  if (ops > 0) await batch.commit();
+
+  return { updated: needsBackfill.length };
 }
 
 // ─── Orders ──────────────────────────────────────────────

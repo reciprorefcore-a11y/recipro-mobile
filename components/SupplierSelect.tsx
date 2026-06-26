@@ -6,11 +6,13 @@ type Props = {
   value: string;
   onChange: (value: string) => void;
   suppliers: string[];
+  onAddNew?: (name: string) => Promise<void>;
 };
 
-export default function SupplierSelect({ value, onChange, suppliers }: Props) {
+export default function SupplierSelect({ value, onChange, suppliers, onAddNew }: Props) {
   const [addingNew, setAddingNew] = useState(false);
   const [newName, setNewName] = useState("");
+  const [saving, setSaving] = useState(false);
 
   if (addingNew) {
     return (
@@ -19,7 +21,7 @@ export default function SupplierSelect({ value, onChange, suppliers }: Props) {
           type="text"
           value={newName}
           onChange={(e) => setNewName(e.target.value)}
-          placeholder="新しい仕入先名"
+          placeholder="新しい取引先名"
           autoFocus
           className="w-full rounded-xl border border-gray-200 px-4 py-3 text-[16px] outline-none focus:ring-2 focus:ring-primary"
         />
@@ -33,17 +35,26 @@ export default function SupplierSelect({ value, onChange, suppliers }: Props) {
           </button>
           <button
             type="button"
-            onClick={() => {
-              if (newName.trim()) {
-                onChange(newName.trim());
-                setAddingNew(false);
-                setNewName("");
+            disabled={saving || !newName.trim()}
+            onClick={async () => {
+              const trimmed = newName.trim();
+              if (!trimmed) return;
+              setSaving(true);
+              try {
+                if (onAddNew) await onAddNew(trimmed);
+              } catch {
+                // master保存失敗でも選択は続行
+              } finally {
+                setSaving(false);
               }
+              onChange(trimmed);
+              setAddingNew(false);
+              setNewName("");
             }}
-            className="flex-1 py-2 rounded-xl text-sm font-semibold text-white transition-colors"
+            className="flex-1 py-2 rounded-xl text-sm font-semibold text-white disabled:opacity-50 transition-colors"
             style={{ backgroundColor: "#E85D2C" }}
           >
-            追加して選択
+            {saving ? "登録中..." : "追加して選択"}
           </button>
         </div>
       </div>
@@ -66,7 +77,7 @@ export default function SupplierSelect({ value, onChange, suppliers }: Props) {
       {suppliers.map((s) => (
         <option key={s} value={s}>{s}</option>
       ))}
-      <option value="__new__">＋ 新しい仕入先を追加</option>
+      <option value="__new__">＋ 新しい取引先を追加</option>
     </select>
   );
 }

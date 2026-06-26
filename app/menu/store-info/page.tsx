@@ -2,14 +2,13 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useAuth } from "@/hooks/useAuth";
 import {
-  getUserProfile,
-  saveStoreInfo,
-  getGeneralSettings,
-  savePriceMode,
-} from "@/lib/firestore";
-import type { PriceMode } from "@/types";
+  reauthenticateWithCredential,
+  EmailAuthProvider,
+  updatePassword,
+} from "firebase/auth";
+import { useAuth } from "@/hooks/useAuth";
+import { getUserProfile, saveStoreInfo } from "@/lib/firestore";
 
 type FormKey = "storeName" | "zipCode" | "address" | "phone" | "fax" | "personInCharge";
 type FormState = Record<FormKey, string>;
@@ -35,17 +34,19 @@ export default function StoreInfoPage() {
     fax: "",
     personInCharge: "",
   });
-  const [priceMode, setPriceMode] = useState<PriceMode | undefined>(undefined);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState("");
   const [loading, setLoading] = useState(true);
 
+  // パスワード変更
+  const [pwForm, setPwForm] = useState({ current: "", next: "", confirm: "" });
+  const [pwMsg, setPwMsg] = useState("");
+  const [pwSaving, setPwSaving] = useState(false);
+  const [showPw, setShowPw] = useState({ current: false, next: false, confirm: false });
+
   useEffect(() => {
     if (!user) return;
-    Promise.all([
-      getUserProfile(user.uid),
-      getGeneralSettings(user.uid),
-    ]).then(([profile, settings]) => {
+    getUserProfile(user.uid).then((profile) => {
       if (profile) {
         setForm({
           storeName: profile.storeName ?? "",
@@ -56,7 +57,6 @@ export default function StoreInfoPage() {
           personInCharge: profile.personInCharge ?? "",
         });
       }
-      if (settings?.priceMode) setPriceMode(settings.priceMode);
       setLoading(false);
     });
   }, [user]);
@@ -84,10 +84,47 @@ export default function StoreInfoPage() {
     }
   };
 
-  const handlePriceModeChange = async (mode: PriceMode) => {
+  const handlePasswordChange = async () => {
     if (!user) return;
-    setPriceMode(mode);
-    await savePriceMode(user.uid, mode).catch(console.error);
+    if (!pwForm.current || !pwForm.next || !pwForm.confirm) {
+      setPwMsg("❌ すべての項目を入力してください");
+      return;
+    }
+    if (pwForm.next !== pwForm.confirm) {
+      setPwMsg("❌ 新しいパスワードが一致しません");
+      return;
+    }
+    if (pwForm.next.length < 6) {
+      setPwMsg("❌ パスワードは6文字以上で入力してください");
+      return;
+    }
+    if (!user.email) {
+      setPwMsg("❌ メールアドレスが取得できません");
+      return;
+    }
+
+    setPwSaving(true);
+    setPwMsg("");
+    try {
+      const credential = EmailAuthProvider.credential(user.email, pwForm.current);
+      await reauthenticateWithCredential(user, credential);
+      await updatePassword(user, pwForm.next);
+      setPwMsg("✅ パスワードを変更しました");
+      setPwForm({ current: "", next: "", confirm: "" });
+    } catch (err: unknown) {
+      const code = (err as { code?: string }).code;
+      if (code === "auth/wrong-password" || code === "auth/invalid-credential") {
+        setPwMsg("❌ 現在のパスワードが正しくありません");
+      } else if (code === "auth/weak-password") {
+        setPwMsg("❌ パスワードは6文字以上で設定してください");
+      } else if (code === "auth/too-many-requests") {
+        setPwMsg("❌ 試行回数が多すぎます。しばらく時間をおいてください");
+      } else {
+        setPwMsg("❌ パスワード変更に失敗しました");
+      }
+    } finally {
+      setPwSaving(false);
+    }
   };
 
   if (loading) {
@@ -154,35 +191,58 @@ export default function StoreInfoPage() {
           </button>
         </div>
 
-        {/* 価格設定 */}
+        {/* パスワード変更 */}
         <div className="bg-white rounded-2xl shadow-sm p-4 space-y-3">
-          <p className="text-sm font-medium text-gray-500">価格設定</p>
-          <p className="text-xs text-gray-400">食材単価の税表示方法を選択してください</p>
-          <div className="flex gap-3">
-            {([
-              { value: "taxIncluded", label: "税込" },
-              { value: "taxExcluded", label: "税別" },
-            ] as const).map(({ value, label }) => (
-              <button
-                key={value}
-                type="button"
-                onClick={() => handlePriceModeChange(value)}
-                className="flex-1 py-2.5 rounded-xl text-sm font-semibold border-2 transition-all"
-                style={{
-                  color: priceMode === value ? "#fff" : "#E85D2C",
-                  backgroundColor: priceMode === value ? "#E85D2C" : "transparent",
-                  borderColor: "#E85D2C",
-                }}
-              >
-                {label}
-              </button>
-            ))}
+          <div>
+            <p className="text-sm font-medium text-gray-700">ログインパスワード変更</p>
+            <p className="text-xs text-gray-400 mt-0.5">
+              レシプロモバイルのログインパスワードを変更します。<br />
+              Recipro本体のパスワードとは別です。
+            </p>
           </div>
-          {priceMode && (
-            <p className="text-xs text-gray-400 text-center">
-              現在: {priceMode === "taxIncluded" ? "税込" : "税別"}
+
+          {[
+            { key: "current" as const, label: "現在のパスワード", placeholder: "現在のパスワードを入力" },
+            { key: "next" as const, label: "新しいパスワード", placeholder: "6文字以上" },
+            { key: "confirm" as const, label: "新しいパスワード（確認）", placeholder: "もう一度入力" },
+          ].map(({ key, label, placeholder }) => (
+            <div key={key}>
+              <label className="block text-xs font-medium text-gray-500 mb-1">{label}</label>
+              <div className="relative">
+                <input
+                  type={showPw[key] ? "text" : "password"}
+                  value={pwForm[key]}
+                  onChange={(e) => setPwForm((f) => ({ ...f, [key]: e.target.value }))}
+                  placeholder={placeholder}
+                  className="w-full rounded-xl border border-gray-200 px-4 py-3 pr-10 text-[16px] outline-none focus:ring-2 focus:border-transparent transition-shadow"
+                  style={{ "--tw-ring-color": "#E85D2C" } as React.CSSProperties}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPw((s) => ({ ...s, [key]: !s[key] }))}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs"
+                >
+                  {showPw[key] ? "隠す" : "表示"}
+                </button>
+              </div>
+            </div>
+          ))}
+
+          {pwMsg && (
+            <p className={`text-sm text-center ${pwMsg.startsWith("❌") ? "text-red-500" : "text-green-600"}`}>
+              {pwMsg}
             </p>
           )}
+
+          <button
+            type="button"
+            onClick={handlePasswordChange}
+            disabled={pwSaving || !pwForm.current || !pwForm.next || !pwForm.confirm}
+            className="w-full py-3 rounded-xl text-sm font-bold text-white disabled:opacity-40 transition-opacity"
+            style={{ backgroundColor: "#E85D2C" }}
+          >
+            {pwSaving ? "変更中..." : "パスワードを変更する"}
+          </button>
         </div>
 
       </div>

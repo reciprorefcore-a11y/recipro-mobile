@@ -22,12 +22,13 @@ type Props = {
   onClose: () => void;
   onAdd: (data: AddData) => Promise<void>;
   suppliers?: string[];
+  onAddNewSupplier?: (name: string) => Promise<void>;
 };
 
 const UNITS = ["kg", "g", "個", "L", "缶", "パック", "本", "枚"];
 const CATEGORY_OPTIONS = ["未分類", "野菜", "肉", "魚介", "調味料", "米・パン", "加工食品", "その他"];
 
-export default function AddIngredientModal({ isOpen, onClose, onAdd, suppliers = [] }: Props) {
+export default function AddIngredientModal({ isOpen, onClose, onAdd, suppliers = [], onAddNewSupplier }: Props) {
   const [ingredientName, setIngredientName] = useState("");
   const [ingredientNameKana, setIngredientNameKana] = useState("");
   const [unit, setUnit] = useState("kg");
@@ -159,11 +160,12 @@ export default function AddIngredientModal({ isOpen, onClose, onAdd, suppliers =
           </div>
 
           <div>
-            <label className="block text-sm font-medium mb-1">仕入先 (任意)</label>
+            <label className="block text-sm font-medium mb-1">取引先 (任意)</label>
             <SupplierSelect
               value={supplier}
               onChange={setSupplier}
               suppliers={suppliers}
+              onAddNew={onAddNewSupplier}
             />
           </div>
 

@@ -7,7 +7,8 @@ import { useAuth } from "@/hooks/useAuth";
 import {
   addPriceHistory,
   getIngredient,
-  getIngredients,
+  getSuppliers,
+  addSupplierToMaster,
   updateIngredient,
 } from "@/lib/firestore";
 import { formatDaysAgo } from "@/lib/utils";
@@ -62,20 +63,24 @@ export default function IngredientDetailPage() {
     setCategory(item.category ?? "");
   };
 
+  const handleAddNewSupplier = async (name: string) => {
+    if (!companyId) return;
+    await addSupplierToMaster(companyId, name);
+    const updated = await getSuppliers(companyId);
+    setSuppliers(updated.map((s) => s.name));
+  };
+
   useEffect(() => {
     if (!companyId || !ingredientId) return;
     let ignore = false;
     Promise.all([
       getIngredient(companyId, ingredientId),
-      getIngredients(companyId),
-    ]).then(([data, all]) => {
+      getSuppliers(companyId),
+    ]).then(([data, masterList]) => {
       if (ignore) return;
       setIngredient(data);
       if (data) syncForm(data);
-      const names = Array.from(
-        new Set(all.map((i) => i.supplier).filter((s): s is string => !!s))
-      );
-      setSuppliers(names);
+      setSuppliers(masterList.map((s) => s.name));
     }).finally(() => {
       if (!ignore) setLoading(false);
     });
@@ -241,11 +246,12 @@ export default function IngredientDetailPage() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium mb-1">仕入先</label>
+              <label className="block text-sm font-medium mb-1">取引先</label>
               <SupplierSelect
                 value={supplier}
                 onChange={setSupplier}
                 suppliers={suppliers}
+                onAddNew={handleAddNewSupplier}
               />
             </div>
             <Input
@@ -320,29 +326,8 @@ export default function IngredientDetailPage() {
           </form>
         </Card>
 
-        {/* システム情報（読み取り専用） */}
-        <Card>
-          <h2 className="text-xs font-semibold text-gray-500 mb-3">システム情報（編集不可）</h2>
-          <dl className="space-y-2.5">
-            <ReadonlyRow label="Firestore ID" value={ingredient.id} />
-            <ReadonlyRow label="uniqueId" value={ingredient.uniqueId} />
-            <ReadonlyRow label="myCatalogId" value={ingredient.myCatalogId} />
-            <ReadonlyRow label="companyId" value={ingredient.companyId} />
-          </dl>
-        </Card>
       </div>
     </main>
-  );
-}
-
-function ReadonlyRow({ label, value }: { label: string; value?: string }) {
-  return (
-    <div className="flex justify-between gap-3">
-      <dt className="shrink-0 text-xs text-gray-500">{label}</dt>
-      <dd className="min-w-0 break-all text-right text-xs font-medium text-gray-700">
-        {value || "未設定"}
-      </dd>
-    </div>
   );
 }
 
