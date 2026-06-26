@@ -3,6 +3,7 @@ import { verifyIdToken } from "@/lib/firebaseAdmin";
 
 export type OcrItem = {
   name: string;
+  nameKana?: string;
   spec?: string;
   price?: number;
   quantity?: number;
@@ -18,6 +19,7 @@ const SYSTEM_PROMPT = `あなたは飲食店の食材管理システムです。
   "items": [
     {
       "name": "商品名（必須）",
+      "nameKana": "商品名の読み（全角カタカナ）",
       "spec": "規格（例: 1kg, 5L, 10個入）",
       "price": 1200,
       "quantity": 2,
@@ -26,6 +28,7 @@ const SYSTEM_PROMPT = `あなたは飲食店の食材管理システムです。
   ]
 }
 
+- nameKana は商品名の読みを全角カタカナで返す。例: 'ドロゴボウ' 'モッツァレラチーズ' 'トマト'。読み不明・数字のみの場合は省略
 - price は単価（円）の数値。読み取れない場合は null
 - quantity は数量の数値。読み取れない場合は null
 - spec, supplier は読み取れない場合は省略または null`;
@@ -105,6 +108,7 @@ export async function POST(request: Request) {
         .filter((i) => typeof i.name === "string" && (i.name as string).trim())
         .map((i) => ({
           name: String(i.name).trim(),
+          nameKana: i.nameKana ? String(i.nameKana).trim() : undefined,
           spec: i.spec ? String(i.spec).trim() : undefined,
           price:
             typeof i.price === "number" && Number.isFinite(i.price)

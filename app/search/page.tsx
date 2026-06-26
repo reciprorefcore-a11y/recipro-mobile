@@ -21,6 +21,8 @@ type AddData = {
   unit: string;
   currentPrice: number;
   supplier: string;
+  supplierKana?: string;
+  category?: string;
 };
 
 

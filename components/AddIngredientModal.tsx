@@ -5,6 +5,7 @@ import Input from "./ui/Input";
 import Button from "./ui/Button";
 import SupplierSelect from "./SupplierSelect";
 import { toKatakana } from "@/lib/textUtils";
+import { generateKanaFromName } from "@/lib/kanaUtils";
 
 type AddData = {
   ingredientName: string;
@@ -12,6 +13,8 @@ type AddData = {
   unit: string;
   currentPrice: number;
   supplier: string;
+  supplierKana?: string;
+  category?: string;
 };
 
 type Props = {
@@ -22,6 +25,7 @@ type Props = {
 };
 
 const UNITS = ["kg", "g", "個", "L", "缶", "パック", "本", "枚"];
+const CATEGORY_OPTIONS = ["未分類", "野菜", "肉", "魚介", "調味料", "米・パン", "加工食品", "その他"];
 
 export default function AddIngredientModal({ isOpen, onClose, onAdd, suppliers = [] }: Props) {
   const [ingredientName, setIngredientName] = useState("");
@@ -29,6 +33,9 @@ export default function AddIngredientModal({ isOpen, onClose, onAdd, suppliers =
   const [unit, setUnit] = useState("kg");
   const [currentPrice, setCurrentPrice] = useState("");
   const [supplier, setSupplier] = useState("");
+  const [supplierKana, setSupplierKana] = useState("");
+  const [category, setCategory] = useState("");
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -40,6 +47,9 @@ export default function AddIngredientModal({ isOpen, onClose, onAdd, suppliers =
     setUnit("kg");
     setCurrentPrice("");
     setSupplier("");
+    setSupplierKana("");
+    setCategory("");
+    setShowAdvanced(false);
     setError("");
   };
 
@@ -50,19 +60,29 @@ export default function AddIngredientModal({ isOpen, onClose, onAdd, suppliers =
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!ingredientName || !ingredientNameKana || !currentPrice) {
-      setError("食材名・ひらがな・価格は必須です");
+    if (!ingredientName || !currentPrice) {
+      setError("食材名と価格は必須です");
       return;
     }
     setError("");
     setLoading(true);
     try {
+      const finalKana = ingredientNameKana.trim()
+        ? toKatakana(ingredientNameKana.trim())
+        : generateKanaFromName(ingredientName.trim());
+      const finalSupplierKana = supplierKana.trim()
+        ? toKatakana(supplierKana.trim())
+        : generateKanaFromName(supplier.trim());
+      const finalCategory = category || "未分類";
+
       await onAdd({
         ingredientName,
-        ingredientNameKana: toKatakana(ingredientNameKana),
+        ingredientNameKana: finalKana,
         unit,
         currentPrice: Number(currentPrice),
         supplier,
+        supplierKana: finalSupplierKana || undefined,
+        category: finalCategory,
       });
       reset();
       onClose();
@@ -81,7 +101,6 @@ export default function AddIngredientModal({ isOpen, onClose, onAdd, suppliers =
       style={{ zIndex: 200 }}
       onClick={handleClose}
     >
-      {/* form でラップし、flex-col で header/scroll/footer を分離 */}
       <form
         id="add-ingredient-form"
         onSubmit={handleSubmit}
@@ -104,6 +123,7 @@ export default function AddIngredientModal({ isOpen, onClose, onAdd, suppliers =
 
         {/* ── スクロール可能なフォーム領域 ─────────── */}
         <div className="flex-1 overflow-y-auto px-6 py-4 space-y-3">
+          {/* ── メインフィールド ── */}
           <Input
             label="食材名 *"
             type="text"
@@ -112,27 +132,7 @@ export default function AddIngredientModal({ isOpen, onClose, onAdd, suppliers =
             placeholder="例: 豚バラスライス"
             required
           />
-          <Input
-            label="読みがな (カタカナ) *"
-            type="text"
-            value={ingredientNameKana}
-            onChange={(e) => setIngredientNameKana(e.target.value)}
-            onBlur={(e) => setIngredientNameKana(toKatakana(e.target.value))}
-            placeholder="例: ブタバラスライス"
-            required
-          />
-          <div>
-            <label className="block text-sm font-medium mb-1">単位 *</label>
-            <select
-              value={unit}
-              onChange={(e) => setUnit(e.target.value)}
-              className="w-full rounded-xl border border-gray-200 px-4 py-3 text-[16px] outline-none focus:ring-2 focus:ring-primary bg-white"
-            >
-              {UNITS.map((u) => (
-                <option key={u} value={u}>{u}</option>
-              ))}
-            </select>
-          </div>
+
           {/* 価格セクション */}
           <div className="rounded-xl border border-gray-100 bg-gray-50 px-4 py-3 space-y-2">
             <div className="flex items-center justify-between">
@@ -157,6 +157,7 @@ export default function AddIngredientModal({ isOpen, onClose, onAdd, suppliers =
               className="w-full rounded-xl border-2 border-primary px-4 py-3 text-[16px] font-bold outline-none focus:ring-2 focus:ring-primary bg-white"
             />
           </div>
+
           <div>
             <label className="block text-sm font-medium mb-1">仕入先 (任意)</label>
             <SupplierSelect
@@ -165,6 +166,62 @@ export default function AddIngredientModal({ isOpen, onClose, onAdd, suppliers =
               suppliers={suppliers}
             />
           </div>
+
+          <div>
+            <label className="block text-sm font-medium mb-1">単位</label>
+            <select
+              value={unit}
+              onChange={(e) => setUnit(e.target.value)}
+              className="w-full rounded-xl border border-gray-200 px-4 py-3 text-[16px] outline-none focus:ring-2 focus:ring-primary bg-white"
+            >
+              {UNITS.map((u) => (
+                <option key={u} value={u}>{u}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* ── 詳細設定（折りたたみ） ── */}
+          <button
+            type="button"
+            onClick={() => setShowAdvanced(v => !v)}
+            className="w-full flex items-center justify-between py-2 border-t border-gray-100 text-xs text-gray-500 hover:text-gray-700"
+          >
+            <span>詳細設定（カナ・カテゴリ）</span>
+            <span>{showAdvanced ? "▲" : "▼"}</span>
+          </button>
+
+          {showAdvanced && (
+            <div className="space-y-3 pb-1">
+              <Input
+                label="商品名カナ（カタカナ）"
+                type="text"
+                value={ingredientNameKana}
+                onChange={(e) => setIngredientNameKana(e.target.value)}
+                onBlur={(e) => setIngredientNameKana(toKatakana(e.target.value))}
+                placeholder="未入力の場合は自動生成"
+              />
+              <Input
+                label="取引先名カナ（カタカナ）"
+                type="text"
+                value={supplierKana}
+                onChange={(e) => setSupplierKana(e.target.value)}
+                onBlur={(e) => setSupplierKana(toKatakana(e.target.value))}
+                placeholder="未入力の場合は自動生成"
+              />
+              <div>
+                <label className="block text-sm font-medium mb-1">カテゴリ</label>
+                <select
+                  value={category}
+                  onChange={(e) => setCategory(e.target.value)}
+                  className="w-full rounded-xl border border-gray-200 px-4 py-3 text-[16px] outline-none focus:ring-2 focus:ring-primary bg-white"
+                >
+                  {CATEGORY_OPTIONS.map((c) => (
+                    <option key={c} value={c === "未分類" ? "" : c}>{c}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          )}
 
           {error && (
             <p className="text-sm text-red-500 bg-red-50 rounded-xl p-3">{error}</p>
